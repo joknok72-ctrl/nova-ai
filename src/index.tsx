@@ -17,6 +17,13 @@ app.use('/api/*', cors())
 // ---------- UI ----------
 app.get('/', (c) => c.html(page(), 200, { 'Cache-Control': 'public, max-age=300' }))
 
+// Service worker must live at the root scope; proxy it from the static asset with the right headers.
+app.get('/sw.js', async (c) => {
+  const url = new URL('/static/sw.js', c.req.url)
+  const res = await fetch(url.toString(), { headers: { 'x-nova-internal': '1' } })
+  return new Response(res.body, { status: res.status, headers: { 'Content-Type': 'application/javascript; charset=utf-8', 'Cache-Control': 'no-cache', 'Service-Worker-Allowed': '/' } })
+})
+
 // ---------- Meta ----------
 app.get('/api/meta', (c) =>
   c.json({

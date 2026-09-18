@@ -91,7 +91,7 @@ window.N = window.N || {}
         const act = e.target.closest('[data-act]')?.dataset.act
         if (act === 'pin') return togglePin(c)
         if (act === 'del') return deleteConversation(c.id)
-        loadConversation(c.id); openSidebar(false)
+        N.loadConversation(c.id); openSidebar(false)
       }
       list.appendChild(item)
     }

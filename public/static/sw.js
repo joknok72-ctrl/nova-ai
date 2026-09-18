@@ -3,7 +3,7 @@
    - App shell + all static assets: cache-first (served from disk, zero network).
    - /api/*: network-only (this is the ONLY thing that touches the internet — a few KB per message).
    - Background refresh of the shell so updates arrive silently. */
-const VERSION = 'nova-v3'
+const VERSION = 'nova-v4'
 const SHELL = [
   '/',
   '/static/app.css',
@@ -22,6 +22,7 @@ const SHELL = [
   '/static/vendor/fa/webfonts/fa-solid-900.woff2',
   '/static/vendor/fa/webfonts/fa-regular-400.woff2',
   '/static/vendor/fa/webfonts/fa-brands-400.woff2',
+  '/static/vendor/fa/webfonts/fa-v4compatibility.woff2',
   '/static/vendor/fonts/fonts.css',
 ]
 
@@ -46,7 +47,7 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url)
   if (url.origin !== location.origin) return // never touch third-party (there is none)
-  if (url.pathname.startsWith('/api/') || url.pathname === '/sw.js') return // network-only, streaming
+  if (url.pathname.startsWith('/api/') || url.pathname === '/sw.js' || url.pathname === '/static/sw.js') return // network-only, streaming
 
   if (e.request.method !== 'GET') return
   e.respondWith(
