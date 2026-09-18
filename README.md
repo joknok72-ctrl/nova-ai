@@ -1,89 +1,71 @@
 # ⚡ NOVA CODE — مبرمجك الخارق بالذكاء الاصطناعي
 
-> مهندس برمجيات بالذكاء الاصطناعي يبني مشاريع كاملة من الصفر، يصلح الأخطاء، يراجع الكود، ويصمّم الأنظمة — مع ذاكرة طويلة المدى وردود لحظية. مخصص 100% للبرمجة والبناء.
-
-## 🎯 نظرة عامة
-- **الاسم**: NOVA CODE
-- **الهدف**: منصة AI متخصصة في البرمجة فقط — تكتب مشاريع كاملة قابلة للتشغيل (كل الملفات + أوامر التشغيل والنشر) حتى لمن لا يعرف البرمجة.
-- **المميزات**:
-  - 🏗️ **6 أوضاع هندسية**: البنّاء (مشاريع كاملة)، المُصحِّح، المُراجِع، المهندس المعماري، المُعلِّم، DevOps
-  - 📦 **بدون placeholders** — System Prompts مُحكمة تُلزم النموذج بكتابة ملفات كاملة قابلة للتشغيل
-  - 🔄 **Streaming (SSE)** — الكود يظهر لحظياً مع إيقاف / إعادة توليد / تعديل
-  - 🧠 **ذاكرة طويلة المدى** — يتذكر الـ stack ونظام التشغيل والمشاريع ومستواك تلقائياً
-  - 🚀 **4 نماذج**: NOVA Codex (الأقوى في الكود) / Ultra / Pro / Fast
-  - 🔑 **BYOK** — ضع مفتاح API الخاص بك من أي مزود متوافق مع OpenAI (يُحفظ في متصفحك فقط)
-  - 🎨 تلوين الكود + نسخ بضغطة + تصدير المحادثة Markdown
-  - 💬 عناوين تلقائية، بحث، تثبيت، إعادة تسمية، حذف
-  - 🌍 عربي/إنجليزي تلقائياً، واجهة RTL، متجاوبة للموبايل
-  - 🔒 بدون تسجيل (هوية عبر Cookie آمن HttpOnly)
+> أنت تقول **ماذا** تريد، وهو يقرر **كل شيء تقني** ويبنيه كاملاً. يعمل **بدون إنترنت** — الشبكة تُستخدم فقط لإرسال رسالتك للنموذج (بضع كيلوبايت).
 
 ## 🔗 الروابط
-- **تجريبي (Sandbox)**: https://3000-ivmia8352umz5zm228vmx-ecea8f22.sandbox.novita.ai
+- **الموقع (Production)**: https://nova-code-9u9.pages.dev
 - **GitHub**: https://github.com/joknok72-ctrl/nova-ai
-- **Production**: لم يُنشر بعد
+- **Cloudflare Pages project**: `nova-code` (حساب `eaf25271…`)
+
+## 🎯 ما هو
+منصة ذكاء اصطناعي مخصصة **للبرمجة والبناء فقط**. مصممة لمن لا يعرف البرمجة: لا تختار لغة ولا إطار عمل — NOVA يختار الأفضل ويكتب المشروع كاملاً بكل ملفاته، ويشرح خطوة بخطوة كيف تشغّله وتنشره.
+
+## ✨ المميزات
+| | |
+|---|---|
+| ⚡ **وضع تلقائي ذكي** | يحدد بنفسه: بناء / إصلاح / مراجعة / تصميم معماري / شرح / نشر — بدون أوضاع يختارها المستخدم |
+| 📦 **مشاريع كاملة** | كل الملفات قابلة للتشغيل، ممنوع placeholders، مع خطوات للمبتدئين حسب نظام تشغيلك |
+| 🗂️ **مستعرض ملفات** | يستخرج الملفات من الرد تلقائياً · **معاينة حية** للمواقع · **تنزيل ZIP** |
+| 🔁 **إكمال تلقائي** | لو قطع النموذج الرد لطوله، يكمل من نفسه حتى 4 مرات |
+| 📎 **إرفاق ملفات كود** | أو الصق نصاً طويلاً ويتحول لمرفق تلقائياً |
+| 🧠 **ذاكرة طويلة المدى** | يتعلم نظامك ومستواك ومشاريعك ويستخدمها في كل مشروع |
+| 🔑 **أي مزود + كل النماذج** | Gemini (مجاني) · Groq (مجاني) · OpenRouter · OpenAI · Claude · DeepSeek · Mistral · Together · xAI · Ollama محلي — **يجلب كل النماذج المتاحة لحسابك لحظياً** بما فيها الجديدة، ويختار الأفضل للبرمجة |
+| 📴 **بدون إنترنت** | Service Worker + IndexedDB: كل الواجهة والمشاريع والذاكرة على جهازك. **0 طلبات خارجية** غير نداء النموذج |
+| 🔒 **خصوصية كاملة** | الخادم **لا يخزّن شيئاً** (Stateless relay). المفتاح في متصفحك فقط |
+| 💾 **نسخة احتياطية** | تصدير/استيراد كل البيانات كملف JSON |
+| 📱 **PWA** | يُثبَّت كتطبيق على الموبايل والكمبيوتر |
 
 ## 🛠️ الـ Stack
 | الطبقة | التقنية |
 |---|---|
-| Backend | Hono + TypeScript على Cloudflare Workers/Pages |
-| Database | Cloudflare D1 (SQLite) |
-| LLM | أي API متوافق مع OpenAI (Streaming) |
-| Frontend | Vanilla JS + Tailwind + marked + highlight.js + DOMPurify |
-| Build | Vite |
+| Edge relay | **Hono + TypeScript** على Cloudflare Pages (stateless — لا قاعدة بيانات) |
+| تخزين | **IndexedDB** في المتصفح (`store.js`) + Service Worker cache |
+| LLM | OpenAI-compatible + Anthropic native — Streaming SSE |
+| Frontend | Vanilla JS · Tailwind (مُجمَّع محلياً 13KB) · marked · highlight.js · DOMPurify · JSZip — **كلها محلية** |
 
-## 🗄️ البيانات
-```
-conversations (id, user_id, title, persona, model, pinned, created_at, updated_at)
-messages      (id, conversation_id, role, content, tokens, created_at)
-memories      (id, user_id, fact, source_conversation_id, created_at)
-usage_stats   (user_id, total_messages, total_tokens, last_active)
-```
-**التدفق**: رسالة → D1 → بناء Context (System Prompt للوضع + الذاكرة + آخر الرسائل ≤ 24K توكن) → LLM Streaming → حفظ الرد → بالخلفية: عنوان تلقائي + استخلاص حقائق للذاكرة. عند فشل المزود يُحذف تلقائياً ما لم يكتمل (Rollback).
-
-## 🧩 API
+## 🧩 API (الخادم)
 | Method | Path | الوصف |
 |---|---|---|
-| GET | `/api/meta` | الأوضاع، النماذج، الإحصائيات، حالة مفتاح الخادم |
-| GET/POST | `/api/conversations` | قائمة / إنشاء `{persona, model}` |
-| GET/PATCH/DELETE | `/api/conversations/:id` | جلب مع الرسائل / تعديل `{title, persona, model, pinned}` / حذف |
-| POST | `/api/chat` | **SSE** `{content, conversation_id?, persona?, model?, regenerate?}` → أحداث `meta`, `delta`, `error`, `done` |
-| GET/POST/DELETE | `/api/memories[/:id]` | إدارة الذاكرة |
+| GET | `/api/meta` | المزودون، النماذج الافتراضية، الإعدادات |
+| POST | `/api/models` | `{apiKey, baseUrl}` → اكتشاف كل نماذج الحساب لحظياً (Gemini native / OpenAI `/models` / Anthropic) |
+| POST | `/api/chat` | **SSE** — `{messages[], memories[], model, os, want_title, want_facts}` → `meta` · `delta` · `status` · `error` · `done{title,facts,tokens}` |
+| GET | `/sw.js` | Service Worker |
 
-BYOK headers على `/api/chat`: `x-nova-key`, `x-nova-base-url`, `x-nova-cheap-model`
+BYOK headers: `x-nova-key`, `x-nova-base-url`, `x-nova-cheap-model`
 
-## 📖 طريقة الاستخدام
-1. افتح الرابط. اختر **الوضع** (البنّاء افتراضياً) و**النموذج**.
-2. اكتب مثلاً: «ابني لي بوت تليجرام بـ Python يحفظ المستخدمين» → ستحصل على كل الملفات + خطوات تشغيل للمبتدئين.
-3. لو المشروع كبير وتوقف الرد، اكتب **«كمّل»**.
-4. للأخطاء: بدّل لوضع **المُصحِّح** والصق الكود + رسالة الخطأ.
-5. **لو ظهر خطأ رصيد/مفتاح**: ⚙️ الإعدادات → ضع مفتاح API خاص بك.
+## 📖 كيف تستخدمه (3 خطوات)
+1. افتح https://nova-code-9u9.pages.dev
+2. **المزود و مفتاح API** → اختر **Google Gemini** → اضغط "احصل على مفتاح من هنا" (https://aistudio.google.com/app/apikey) → الصق المفتاح → **اتصال وجلب النماذج**. ستظهر كل نماذج حسابك وسيُختار الأفضل للبرمجة تلقائياً.
+3. اكتب: «اعمل لي موقع لمطعم فيه المنيو وحجز» → تحصل على كل الملفات + معاينة حية + ZIP + خطوات التشغيل.
+
+لو خلص رصيد المفتاح: افتح نفس النافذة وبدّل لمزود آخر (Groq مجاني) في ثوانٍ.
 
 ## 🚀 التشغيل محلياً
 ```bash
 npm install
-cp .dev.vars.example .dev.vars    # ضع مفتاحك
-npm run build
-npx wrangler d1 migrations apply webapp-production --local
-pm2 start ecosystem.config.cjs    # http://localhost:3000
+npm run build              # يبني Tailwind + Worker
+pm2 start ecosystem.config.cjs   # http://localhost:3000
 ```
+اختياري: `.dev.vars` بـ `OPENAI_API_KEY`/`OPENAI_BASE_URL` كمفتاح خادم افتراضي.
 
-## ☁️ النشر على Cloudflare Pages
+## ☁️ النشر
 ```bash
-npx wrangler d1 create webapp-production          # انسخ database_id إلى wrangler.jsonc
-npx wrangler d1 migrations apply webapp-production
-npx wrangler pages project create nova-ai --production-branch main
-npm run build && npx wrangler pages deploy dist --project-name nova-ai
-npx wrangler pages secret put OPENAI_API_KEY --project-name nova-ai
-npx wrangler pages secret put OPENAI_BASE_URL --project-name nova-ai
+npm run build && npx wrangler pages deploy dist --project-name nova-code
 ```
-**الحالة**: ⏳ جاهز للنشر
+- **الحالة**: ✅ منشور — 2026-09-18
 
 ## 🔜 خطوات مقترحة
-- [ ] معاينة حية للـ HTML/React داخل المتصفح (Sandbox iframe)
-- [ ] تنزيل المشروع كـ ZIP بضغطة واحدة
-- [ ] رفع ملفات/صور (Vision) عبر R2 لتحويل التصميم إلى كود
-- [ ] تسجيل دخول لمزامنة المحادثات بين الأجهزة
-- [ ] ربط مباشر بـ GitHub (Push المشروع من الشات)
-- [ ] Rate limiting
-
-**آخر تحديث**: 2026-09-18
+- [ ] معاينة React/Vite داخل المتصفح (WebContainers)
+- [ ] Push مباشر إلى GitHub من الشات
+- [ ] تحويل صورة تصميم إلى كود (Vision)
+- [ ] وضع فاتح
