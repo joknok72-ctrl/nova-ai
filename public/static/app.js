@@ -71,7 +71,7 @@ window.N = window.N || {}
   $('#sidebar-backdrop').onclick = () => openSidebar(false)
 
   const groupLabel = (d) => {
-    const diff = (Date.now() - new Date(d.replace(' ', 'T') + 'Z')) / 864e5
+    const diff = (Date.now() - new Date(d.replace(' ', 'T'))) / 864e5
     if (diff < 1) return 'اليوم'; if (diff < 2) return 'أمس'; if (diff < 7) return 'هذا الأسبوع'; if (diff < 30) return 'هذا الشهر'; return 'أقدم'
   }
   function renderConversations() {
@@ -97,12 +97,12 @@ window.N = window.N || {}
     }
   }
   $('#search-input').oninput = renderConversations
-  async function refreshConversations() { state.conversations = await api('/api/conversations'); renderConversations() }
-  async function togglePin(c) { await api(`/api/conversations/${c.id}`, { method: 'PATCH', body: JSON.stringify({ pinned: !c.pinned }) }); refreshConversations() }
+  async function refreshConversations() { state.conversations = await N.store.listConversations(); renderConversations() }
+  async function togglePin(c) { await N.store.updateConversation(c.id, { pinned: c.pinned ? 0 : 1 }); refreshConversations() }
   async function deleteConversation(id) {
     if (!confirm('حذف هذا المشروع نهائياً؟')) return
-    await api(`/api/conversations/${id}`, { method: 'DELETE' })
-    if (state.current?.id === id) newChat()
+    await N.store.deleteConversation(id)
+    if (state.current?.id === id) N.newChat()
     refreshConversations(); toast('تم الحذف')
   }
 
@@ -118,7 +118,7 @@ window.N = window.N || {}
   function setModel(id) {
     state.model = id; setModelUI()
     if (usingByok()) { settings.model = id; saveSettings() }
-    if (state.current) api(`/api/conversations/${state.current.id}`, { method: 'PATCH', body: JSON.stringify({ model: id }) }).catch(() => {})
+    if (state.current) N.store.updateConversation(state.current.id, { model: id }).catch(() => {})
     buildModelMenu()
   }
   function buildModelMenu(filter = '') {

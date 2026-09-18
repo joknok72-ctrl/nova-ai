@@ -39,7 +39,8 @@
 
   async function loadConversation(id) {
     if (state.streaming) stopStream()
-    const conv = await api(`/api/conversations/${id}`)
+    const conv = await N.store.getConversation(id); if (!conv) return newChat()
+    conv.messages = await N.store.listMessages(id)
     state.current = conv
     if (conv.model && currentModels().some((m) => m.id === conv.model)) { state.model = conv.model; setModelUI() }
     msgList.innerHTML = ''; state.files = {}
@@ -178,14 +179,22 @@
   async function send() {
     const content = input.value.trim()
     if ((!content && !state.attachments.length) || state.streaming) return
+    if (!navigator.onLine) return toast('لا يوجد إنترنت — إرسال الرسالة للنموذج يحتاج اتصالاً بسيطاً (بضع كيلوبايت)', 3500)
     if (!usingByok() && !state.meta.server_key_configured) return openSettings()
     const attachments = state.attachments; state.attachments = []; renderAttachments()
     input.value = ''; autoGrow()
-    addMessage('user', content + (attachments.length ? `\n\n📎 ${attachments.map((a) => a.name).join(', ')}` : ''))
-    await streamRequest({ content, attachments })
+    let text = content
+    if (attachments.length) text = (content || 'Here are my files:') + attachments.map((a) => `\n\n### 📎 ${a.name}\n\`\`\`${(a.name.split('.').pop() || '').slice(0, 12)}\n${a.content}\n\`\`\``).join('')
+    if (!state.current) { state.current = await N.store.createConversation(state.model); history.replaceState(null, '', `#${state.current.id}`); refreshConversations() }
+    const id = await N.store.addMessage(state.current.id, 'user', text)
+    addMessage('user', text)
+    await streamRequest({ userMsgId: id })
   }
   async function regenerate() {
     if (state.streaming || !state.current) return
+    const msgs = await N.store.listMessages(state.current.id)
+    const lastA = [...msgs].reverse().find((m) => m.role === 'assistant')
+    if (lastA) await N.store.deleteMessagesFrom(state.current.id, lastA.id)
     const last = msgList.querySelector('.msg.assistant:last-of-type'); if (last) last.remove()
     await streamRequest({ regenerate: true })
   }
@@ -194,14 +203,18 @@
     setStreaming(true)
     const bubble = addMessage('assistant', '', { thinking: true })
     const contentEl = bubble.querySelector('.content')
-    let full = '', raf = false, lastPaint = 0
+    let full = '', raf = false, lastPaint = 0, doneInfo = null
     const paint = () => { raf = false; lastPaint = performance.now(); contentEl.innerHTML = md(full); contentEl.classList.add('typing-cursor'); scrollBottom() }
     const schedule = () => { if (raf) return; raf = true; setTimeout(() => requestAnimationFrame(paint), Math.max(0, 90 - (performance.now() - lastPaint))) }
     $('#status-line').textContent = 'NOVA يفكر ويكتب…'
     state.abort = new AbortController()
+    const convId = state.current.id
+    const msgs = await N.store.listMessages(convId)
+    const memories = (await N.store.listMemories()).map((m) => m.fact)
+    const isFirst = msgs.filter((m) => m.role === 'user').length === 1
     try {
       const res = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json', ...byokHeaders() }, signal: state.abort.signal,
-        body: JSON.stringify({ ...payload, conversation_id: state.current?.id, model: state.model, os: detectOS() }) })
+        body: JSON.stringify({ messages: msgs.map((m) => ({ role: m.role, content: m.content })), memories, model: state.model, os: detectOS(), want_title: isFirst && !payload.regenerate, want_facts: !payload.regenerate }) })
       if (!res.ok) { const j = await res.json().catch(() => ({})); const e = new Error(j.message || j.error || 'request failed'); e.code = j.error; throw e }
       const reader = res.body.getReader(), dec = new TextDecoder(); let buf = ''
       while (true) {
@@ -213,23 +226,30 @@
           for (const line of ev.split('\n')) { if (line.startsWith('event:')) type = line.slice(6).trim(); else if (line.startsWith('data:')) data += line.slice(5).trim() }
           if (!data) continue
           const j = JSON.parse(data)
-          if (type === 'meta') { if (!state.current) { state.current = { id: j.conversation_id, model: j.model, title: 'مشروع جديد' }; history.replaceState(null, '', `#${j.conversation_id}`); refreshConversations() } }
+          if (type === 'meta') { /* stateless server */ }
           else if (type === 'delta') { full += j.t; schedule() }
           else if (type === 'status') { $('#status-line').textContent = `الرد طويل — NOVA يكمل تلقائياً (جزء ${j.pass + 1})…` }
-          else if (type === 'error') { if (j.conversation_deleted) { state.current = null; history.replaceState(null, '', '/') } const e = new Error(j.message); e.code = j.code; throw e }
-          else if (type === 'done') { if (j.title && state.current) state.current.title = j.title }
+          else if (type === 'error') { const e = new Error(j.message); e.code = j.code; throw e }
+          else if (type === 'done') { doneInfo = j }
         }
       }
       contentEl.innerHTML = md(full); bubble.dataset.raw = full
+      // persist locally
+      await N.store.addMessage(convId, 'assistant', full, doneInfo?.tokens || 0)
+      await N.store.bumpUsage((doneInfo?.tokens || 0))
+      if (doneInfo?.title && state.current) { state.current.title = doneInfo.title; await N.store.updateConversation(convId, { title: doneInfo.title }) }
+      for (const f of doneInfo?.facts || []) await N.store.addMemory(f)
       const n = extractFiles(full); updateFilesButton()
       if (n > 0 && $('#files-panel').classList.contains('hidden') && window.innerWidth >= 1024) { openFiles(Object.keys(state.files).some((p) => /\.html?$/.test(p)) ? 'preview' : 'files'); toast(`تم استخراج ${Object.keys(state.files).length} ملف — يمكنك تنزيلها ZIP`) }
     } catch (err) {
+      if (full) await N.store.addMessage(convId, 'assistant', full).catch(() => {})
       if (err.name === 'AbortError') { contentEl.innerHTML = md(full + (full ? '\n\n' : '') + '_⏹ تم الإيقاف_'); bubble.dataset.raw = full }
       else {
         const needsKey = ['provider', 'auth', 'billing', 'no_api_key', 'rate_limit', 'model'].includes(err.code) || /credit|quota|api key|401|402|403|429/i.test(err.message)
         contentEl.innerHTML = `${full ? md(full) + '<hr>' : ''}<div class="text-red-300 text-sm space-y-2"><div><i class="fas fa-triangle-exclamation"></i> ${esc(err.message)}</div>${needsKey ? `<div class="text-slate-400">💡 ${err.code === 'rate_limit' ? 'انتظر دقيقة أو بدّل النموذج من الأعلى.' : 'أضف/غيّر مفتاح API من'} <button class="underline text-violet-300" data-a="open-settings">الإعدادات</button> — مجاني عبر Google AI Studio أو Groq.</div>` : ''}</div>`
         contentEl.querySelector('[data-a=open-settings]')?.addEventListener('click', (e) => { e.stopPropagation(); openSettings() })
         if (full) bubble.dataset.raw = full
+        else if (payload.userMsgId) { await N.store.deleteMessagesFrom(convId, payload.userMsgId).catch(() => {}); const remaining = await N.store.listMessages(convId); if (!remaining.length) { await N.store.deleteConversation(convId); state.current = null; history.replaceState(null, '', '/') } }
       }
     } finally {
       contentEl.classList.remove('typing-cursor'); setStreaming(false); state.abort = null
@@ -239,7 +259,7 @@
   }
 
   // ---------- Header actions ----------
-  $('#btn-rename').onclick = async () => { if (!state.current) return; const t = prompt('اسم المشروع:', state.current.title); if (!t) return; await api(`/api/conversations/${state.current.id}`, { method: 'PATCH', body: JSON.stringify({ title: t }) }); state.current.title = t; refreshConversations(); toast('تم التعديل') }
+  $('#btn-rename').onclick = async () => { if (!state.current) return; const t = prompt('اسم المشروع:', state.current.title); if (!t) return; await N.store.updateConversation(state.current.id, { title: t }); state.current.title = t; refreshConversations(); toast('تم التعديل') }
   $('#btn-delete').onclick = () => state.current && deleteConversation(state.current.id)
   $('#btn-export').onclick = () => { if (!state.current) return; const parts = [...msgList.querySelectorAll('.msg')].map((m) => `### ${m.classList.contains('user') ? '👤 أنت' : '⚡ NOVA CODE'}\n\n${m.dataset.raw}`); downloadText(`${state.current.title}.md`, `# ${state.current.title}\n\n${parts.join('\n\n---\n\n')}`) }
 
@@ -250,8 +270,7 @@
   $('#modal-close').onclick = closeModal
   modal.onclick = (e) => { if (e.target === modal) closeModal() }
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeModal(); closeMenus() } })
-  const MEM_API = '/api/mem' + 'ories'
-  async function refreshMemoryCount() { try { const m = await api(MEM_API); $('#memory-count').textContent = m.length } catch {} }
+  async function refreshMemoryCount() { try { const m = await N.store.listMemories(); $('#memory-count').textContent = m.length } catch {} }
 
   // ---------- Settings / Provider ----------
   function openSettings() {
@@ -310,21 +329,36 @@
   $('#btn-settings').onclick = openSettings
 
   $('#btn-memory').onclick = async () => {
-    const mems = await api(MEM_API)
+    const mems = await N.store.listMemories()
     const box = el('div', 'space-y-3')
     box.innerHTML = `<p class="text-sm text-slate-400">NOVA يتذكر هذه الحقائق تلقائياً (نظامك، مستواك، مشاريعك، الأدوات التي تستخدمها) ويستخدمها في كل مشروع.</p>`
     const form = el('form', 'flex gap-2'); form.innerHTML = `<input class="input-dark" placeholder="أضف حقيقة… مثال: أستخدم Windows 11 ومبتدئ" required><button class="btn-primary !py-2 !px-4"><i class="fas fa-plus"></i></button>`
-    form.onsubmit = async (e) => { e.preventDefault(); await api(MEM_API, { method: 'POST', body: JSON.stringify({ fact: form.querySelector('input').value }) }); $('#btn-memory').click(); refreshMemoryCount() }
+    form.onsubmit = async (e) => { e.preventDefault(); await N.store.addMemory(form.querySelector('input').value); $('#btn-memory').click(); refreshMemoryCount() }
     box.appendChild(form)
     const list = el('div', 'space-y-2')
     if (!mems.length) list.innerHTML = `<p class="text-center text-slate-500 text-sm py-6">لا توجد ذكريات بعد — ابدأ مشروعاً وعرّف NOVA بنفسك.</p>`
-    for (const m of mems) { const it = el('div', 'memory-item', `<i class="fas fa-brain text-pink-400 mt-1 text-xs"></i><span></span><button title="حذف"><i class="fas fa-times"></i></button>`); it.querySelector('span').textContent = m.fact; it.querySelector('button').onclick = async () => { await api(`${MEM_API}/${m.id}`, { method: 'DELETE' }); it.remove(); refreshMemoryCount() }; list.appendChild(it) }
+    for (const m of mems) { const it = el('div', 'memory-item', `<i class="fas fa-brain text-pink-400 mt-1 text-xs"></i><span></span><button title="حذف"><i class="fas fa-times"></i></button>`); it.querySelector('span').textContent = m.fact; it.querySelector('button').onclick = async () => { await N.store.deleteMemory(m.id); it.remove(); refreshMemoryCount() }; list.appendChild(it) }
     box.appendChild(list)
-    if (mems.length) { const clr = el('button', 'text-xs text-red-400 hover:underline', 'مسح كل الذاكرة'); clr.onclick = async () => { if (confirm('مسح كل الذاكرة؟')) { await api(MEM_API, { method: 'DELETE' }); closeModal(); refreshMemoryCount() } }; box.appendChild(clr) }
+    if (mems.length) { const clr = el('button', 'text-xs text-red-400 hover:underline', 'مسح كل الذاكرة'); clr.onclick = async () => { if (confirm('مسح كل الذاكرة؟')) { await N.store.clearMemories(); closeModal(); refreshMemoryCount() } }; box.appendChild(clr) }
     openModal('🧠 الذاكرة طويلة المدى', box)
   }
+  $('#btn-backup').onclick = () => {
+    const box = el('div', 'space-y-4 text-sm')
+    box.innerHTML = `<p class="text-slate-400 leading-relaxed">كل بياناتك (المشاريع، الرسائل، الذاكرة، الإعدادات) محفوظة <b class="text-slate-200">على جهازك فقط</b> ولا تُرسل لأي خادم. صدّرها كملف لتنقلها لجهاز آخر أو للاحتفاظ بنسخة.</p>
+      <div class="grid grid-cols-2 gap-3">
+        <button id="bk-export" class="btn-primary"><i class="fas fa-file-export"></i> تصدير كل البيانات</button>
+        <button id="bk-import" class="chip justify-center !py-3"><i class="fas fa-file-import"></i> استيراد من ملف</button>
+      </div>
+      <input id="bk-file" type="file" accept="application/json,.json" class="hidden">
+      <details class="text-xs text-slate-500"><summary class="cursor-pointer">خيارات متقدمة</summary><button id="bk-wipe" class="mt-2 text-red-400 hover:underline">مسح كل البيانات من هذا الجهاز</button></details>`
+    box.querySelector('#bk-export').onclick = async () => { const data = await N.store.exportAll(); downloadText(`nova-code-backup-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(data)); toast('تم تصدير النسخة الاحتياطية') }
+    box.querySelector('#bk-import').onclick = () => box.querySelector('#bk-file').click()
+    box.querySelector('#bk-file').onchange = async (e) => { const f = e.target.files[0]; if (!f) return; try { await N.store.importAll(JSON.parse(await f.text())); toast('تم الاستيراد بنجاح'); closeModal(); location.reload() } catch (err) { toast('فشل الاستيراد: ' + err.message, 4000) } }
+    box.querySelector('#bk-wipe').onclick = async () => { if (confirm('مسح كل المشاريع والذاكرة من هذا الجهاز نهائياً؟')) { await N.store.wipe(); localStorage.removeItem('nova_settings'); location.reload() } }
+    openModal('💾 النسخة الاحتياطية', box)
+  }
   $('#btn-stats').onclick = async () => {
-    const { stats } = await api('/api/meta')
+    const stats = await N.store.stats()
     const box = el('div', 'grid grid-cols-2 gap-3')
     for (const [i, v, l, c] of [['fa-folder-tree', stats.conversations, 'مشروع', '#8b5cf6'], ['fa-message', stats.total_messages, 'رسالة', '#06b6d4'], ['fa-coins', Number(stats.total_tokens).toLocaleString(), 'توكن تقريبي', '#f59e0b'], ['fa-brain', stats.memories, 'ذكرى محفوظة', '#ec4899']]) box.appendChild(el('div', 'stat-card', `<i class="fas ${i} mb-2" style="color:${c}"></i><div class="v">${v}</div><div class="l">${l}</div>`))
     openModal('📊 إحصائياتك', box)
@@ -344,14 +378,20 @@
     openModal('⚡ عن NOVA CODE', box)
   }
 
-  Object.assign(N, { input, autoGrow, send, openSettings, loadConversation })
+  Object.assign(N, { input, autoGrow, send, openSettings, loadConversation, newChat, openModal, closeModal, downloadText })
+
+  // ---------- Offline awareness ----------
+  const netBadge = $('#net-badge')
+  const syncNet = () => { netBadge.classList.toggle('show', !navigator.onLine); autoGrow() }
+  addEventListener('online', syncNet); addEventListener('offline', syncNet); syncNet()
 
   // ---------- Init ----------
   ;(async () => {
-    state.meta = await api('/api/meta')
+    try { state.meta = await api('/api/meta'); localStorage.setItem('nova_meta', JSON.stringify(state.meta)) }
+    catch { state.meta = JSON.parse(localStorage.getItem('nova_meta') || 'null'); if (!state.meta) throw new Error('أول تشغيل يحتاج إنترنت مرة واحدة فقط') }
     state.model = usingByok() && settings.model ? settings.model : state.meta.defaults.model
     setModelUI(); renderSuggestions(); updateKeyStatus()
-    $('#memory-count').textContent = state.meta.stats.memories
+    refreshMemoryCount()
     await refreshConversations()
     const hash = location.hash.slice(1)
     if (hash && state.conversations.some((c) => c.id === hash)) loadConversation(hash)

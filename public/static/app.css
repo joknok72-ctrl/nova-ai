@@ -177,3 +177,8 @@ html[dir="ltr"] .toast { transform: translateX(-50%); }
 .menu-search { width: 100%; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.08); border-radius: 8px; padding: .4rem .6rem; font-size: .8rem; outline: none; margin-bottom: .3rem; direction: ltr; }
 .menu-group { font-size: 10px; color: #64748b; padding: .5rem .7rem .2rem; font-weight: 700; }
 .code-block .code-head .cb-actions { display: flex; gap: .2rem; }
+
+/* offline indicator */
+.net-badge { position: fixed; top: 8px; inset-inline-start: 50%; transform: translateX(50%); z-index: 70; font-size: 11px; padding: .25rem .7rem; border-radius: 999px; background: rgba(245,158,11,.15); color: #fbbf24; border: 1px solid rgba(245,158,11,.3); display: none; gap: .4rem; align-items: center; }
+html[dir="ltr"] .net-badge { transform: translateX(-50%); }
+.net-badge.show { display: inline-flex; }

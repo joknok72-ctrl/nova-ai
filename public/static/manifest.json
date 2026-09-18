@@ -1,0 +1,14 @@
+{
+  "name": "NOVA CODE — مبرمجك الخارق",
+  "short_name": "NOVA CODE",
+  "description": "مهندس برمجيات بالذكاء الاصطناعي — يعمل بدون إنترنت، يحتاج الشبكة فقط لإرسال الرسالة للنموذج",
+  "start_url": "/",
+  "display": "standalone",
+  "dir": "rtl",
+  "lang": "ar",
+  "background_color": "#0b0e14",
+  "theme_color": "#0b0e14",
+  "icons": [
+    { "src": "/static/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

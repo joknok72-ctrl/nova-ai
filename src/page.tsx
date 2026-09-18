@@ -6,10 +6,13 @@ export const page = () => `<!DOCTYPE html>
 <title>NOVA CODE — مبرمجك الخارق</title>
 <meta name="description" content="NOVA CODE: مهندس برمجيات بالذكاء الاصطناعي يبني مشاريع كاملة، يصلح، يراجع، وينشر — أنت فقط تقول ماذا تريد">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><defs><linearGradient id='g' x1='0' x2='1' y1='0' y2='1'><stop offset='0' stop-color='%238b5cf6'/><stop offset='1' stop-color='%2306b6d4'/></linearGradient></defs><rect width='100' height='100' rx='24' fill='url(%23g)'/><text x='50' y='68' font-size='52' text-anchor='middle' fill='white' font-family='monospace' font-weight='bold'>&lt;/&gt;</text></svg>">
-<script src="https://cdn.tailwindcss.com"></script>
-<link href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.5.2/css/all.min.css" rel="stylesheet">
-<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" rel="stylesheet">
+<link href="/static/vendor/tw.css" rel="stylesheet">
+<link href="/static/vendor/fa/all.min.css" rel="stylesheet">
+<link href="/static/vendor/fonts/fonts.css" rel="stylesheet">
+<link rel="manifest" href="/static/manifest.json">
+<meta name="theme-color" content="#0b0e14">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link href="/static/vendor/hljs.css" rel="stylesheet">
 <link href="/static/app.css" rel="stylesheet">
 </head>
 <body class="bg-[#0b0e14] text-slate-200">
@@ -42,6 +45,7 @@ export const page = () => `<!DOCTYPE html>
     <footer class="p-3 border-t border-white/5 space-y-1">
       <button id="btn-settings" class="side-link"><i class="fas fa-key text-emerald-400"></i><span>المزود و مفتاح API</span><span id="key-status" class="badge"></span></button>
       <button id="btn-memory" class="side-link"><i class="fas fa-brain text-pink-400"></i><span>الذاكرة</span><span id="memory-count" class="badge">0</span></button>
+      <button id="btn-backup" class="side-link"><i class="fas fa-database text-sky-400"></i><span>نسخة احتياطية / استيراد</span></button>
       <button id="btn-stats" class="side-link"><i class="fas fa-chart-simple text-amber-400"></i><span>الإحصائيات</span></button>
       <button id="btn-about" class="side-link"><i class="fas fa-circle-info text-cyan-400"></i><span>عن NOVA CODE</span></button>
     </footer>
@@ -143,12 +147,15 @@ export const page = () => `<!DOCTYPE html>
 </div>
 
 <div id="toast" class="toast hidden"></div>
+<div id="net-badge" class="net-badge"><i class="fas fa-wifi-slash"></i> بدون إنترنت — كل شيء يعمل ما عدا إرسال رسالة جديدة للنموذج</div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="/static/vendor/hljs.min.js"></script>
+<script src="/static/vendor/marked.min.js"></script>
+<script src="/static/vendor/purify.min.js"></script>
+<script src="/static/vendor/jszip.min.js"></script>
+<script src="/static/store.js"></script>
 <script src="/static/app.js"></script>
 <script src="/static/app2.js"></script>
+<script>if("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(()=>{})</script>
 </body>
 </html>`
