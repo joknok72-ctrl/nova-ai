@@ -1,7 +1,19 @@
-// Thin OpenAI-compatible client using fetch (works on Cloudflare Workers).
-export type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: string }
+// Multi-provider LLM client (fetch-only, Cloudflare Workers compatible).
+// Speaks OpenAI-compatible chat/completions for everyone, and Anthropic's native Messages API for Claude.
+import { detectProvider } from './providers'
 
+export type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: string }
 export type LLMEnv = { OPENAI_API_KEY: string; OPENAI_BASE_URL?: string }
+
+export class LLMError extends Error {
+  code: string
+  status?: number
+  constructor(code: string, message: string, status?: number) {
+    super(message)
+    this.code = code
+    this.status = status
+  }
+}
 
 function baseUrl(env: LLMEnv) {
   return (env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '')
@@ -11,59 +23,108 @@ function baseUrl(env: LLMEnv) {
 export function looksLikeProviderError(text: string) {
   const t = text.trim()
   if (t.length > 400) return false
-  return /credits? can't be used|credit_exhausted|insufficient[_ ]quota|exceeded your current quota|invalid[_ ]api[_ ]key|incorrect api key|rate limit/i.test(t)
+  return /credits? can't be used|credit_exhausted|insufficient[_ ]quota|exceeded your current quota|invalid[_ ]api[_ ]key|incorrect api key|rate limit|RESOURCE_EXHAUSTED/i.test(t)
 }
 
-export class LLMError extends Error {
-  code: string
-  constructor(code: string, message: string) {
-    super(message)
-    this.code = code
-  }
+function classify(status: number, text: string): LLMError {
+  const short = text.slice(0, 300)
+  if (status === 401 || status === 403) return new LLMError('auth', `مفتاح API غير صالح أو بدون صلاحية (${status}). ${short}`, status)
+  if (status === 402) return new LLMError('billing', `الرصيد منتهي (402). ${short}`, status)
+  if (status === 429) return new LLMError('rate_limit', `تم تجاوز الحد المسموح (429) — انتظر قليلاً أو بدّل النموذج/المزود. ${short}`, status)
+  if (status === 404) return new LLMError('model', `النموذج غير موجود أو غير متاح لمفتاحك (404). ${short}`, status)
+  if (status >= 500) return new LLMError('upstream', `خطأ من المزود (${status}). حاول مرة أخرى. ${short}`, status)
+  return new LLMError('upstream', `LLM error ${status}: ${short}`, status)
 }
 
-export async function chatStream(env: LLMEnv, model: string, messages: ChatMessage[]): Promise<Response> {
+// Model-specific request shaping for OpenAI-compatible endpoints
+function shapeBody(model: string, messages: ChatMessage[], stream: boolean, provider: string) {
+  const body: any = { model, messages, stream }
+  const m = model.toLowerCase()
+  // Newer OpenAI reasoning models reject temperature; most others accept it.
+  if (!/^(o\d|gpt-5)/.test(m)) body.temperature = 0.3
+  // Encourage long, complete outputs where supported
+  if (provider === 'openai' && /^(o\d|gpt-5)/.test(m)) body.max_completion_tokens = 32000
+  else if (provider !== 'gemini') body.max_tokens = /claude|deepseek|qwen|llama|mixtral|gemma|codestral|grok/.test(m) ? 16000 : 16000
+  if (stream && (provider === 'openai' || provider === 'openrouter' || provider === 'groq')) body.stream_options = { include_usage: true }
+  return body
+}
+
+// ---------------- OpenAI-compatible ----------------
+async function openaiStream(env: LLMEnv, model: string, messages: ChatMessage[], provider: string): Promise<Response> {
   const res = await fetch(`${baseUrl(env)}/chat/completions`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${env.OPENAI_API_KEY}`,
-    },
-    body: JSON.stringify({ model, messages, stream: true }),
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${env.OPENAI_API_KEY}`, 'HTTP-Referer': 'https://nova-code.pages.dev', 'X-Title': 'NOVA CODE' },
+    body: JSON.stringify(shapeBody(model, messages, true, provider)),
   })
-  if (!res.ok || !res.body) {
-    const text = await res.text().catch(() => '')
-    throw new LLMError(res.status === 401 || res.status === 403 || res.status === 402 ? 'auth' : 'upstream', `LLM error ${res.status}: ${text.slice(0, 300)}`)
-  }
+  if (!res.ok || !res.body) throw classify(res.status, await res.text().catch(() => ''))
   return res
 }
 
-export async function chatOnce(env: LLMEnv, model: string, messages: ChatMessage[]): Promise<string> {
+async function openaiOnce(env: LLMEnv, model: string, messages: ChatMessage[], provider: string): Promise<string> {
   const res = await fetch(`${baseUrl(env)}/chat/completions`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${env.OPENAI_API_KEY}`,
-    },
-    body: JSON.stringify({ model, messages }),
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${env.OPENAI_API_KEY}` },
+    body: JSON.stringify(shapeBody(model, messages, false, provider)),
   })
-  if (!res.ok) {
-    const text = await res.text().catch(() => '')
-    throw new Error(`LLM error ${res.status}: ${text.slice(0, 300)}`)
-  }
+  if (!res.ok) throw classify(res.status, await res.text().catch(() => ''))
   const data: any = await res.json()
   return data?.choices?.[0]?.message?.content ?? ''
 }
 
+// ---------------- Anthropic native ----------------
+function toAnthropic(messages: ChatMessage[]) {
+  const system = messages.filter((m) => m.role === 'system').map((m) => m.content).join('\n\n')
+  const rest = messages.filter((m) => m.role !== 'system').map((m) => ({ role: m.role, content: m.content }))
+  return { system, messages: rest }
+}
+
+async function anthropicStream(env: LLMEnv, model: string, messages: ChatMessage[]): Promise<Response> {
+  const { system, messages: msgs } = toAnthropic(messages)
+  const res = await fetch(`${baseUrl(env)}/messages`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-api-key': env.OPENAI_API_KEY, 'anthropic-version': '2023-06-01' },
+    body: JSON.stringify({ model, system, messages: msgs, max_tokens: 16000, stream: true }),
+  })
+  if (!res.ok || !res.body) throw classify(res.status, await res.text().catch(() => ''))
+  return res
+}
+
+async function anthropicOnce(env: LLMEnv, model: string, messages: ChatMessage[]): Promise<string> {
+  const { system, messages: msgs } = toAnthropic(messages)
+  const res = await fetch(`${baseUrl(env)}/messages`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-api-key': env.OPENAI_API_KEY, 'anthropic-version': '2023-06-01' },
+    body: JSON.stringify({ model, system, messages: msgs, max_tokens: 1024 }),
+  })
+  if (!res.ok) throw classify(res.status, await res.text().catch(() => ''))
+  const data: any = await res.json()
+  return (data?.content || []).map((c: any) => c.text || '').join('')
+}
+
+// ---------------- Public API ----------------
+export async function chatStream(env: LLMEnv, model: string, messages: ChatMessage[]): Promise<Response> {
+  const provider = detectProvider(baseUrl(env))
+  return provider === 'anthropic' ? anthropicStream(env, model, messages) : openaiStream(env, model, messages, provider)
+}
+
+export async function chatOnce(env: LLMEnv, model: string, messages: ChatMessage[]): Promise<string> {
+  const provider = detectProvider(baseUrl(env))
+  return provider === 'anthropic' ? anthropicOnce(env, model, messages) : openaiOnce(env, model, messages, provider)
+}
+
 /**
- * Parse an OpenAI SSE stream and call onDelta for every text chunk.
- * Returns the full accumulated text.
+ * Parse an SSE stream (OpenAI or Anthropic format) and call onDelta for every text chunk.
+ * Returns { text, finish } where finish is 'length' when the model was cut off (so we can auto-continue).
  */
-export async function consumeSSE(body: ReadableStream<Uint8Array>, onDelta: (t: string) => void | Promise<void>) {
+export async function consumeSSE(
+  body: ReadableStream<Uint8Array>,
+  onDelta: (t: string) => void | Promise<void>
+): Promise<{ text: string; finish: string }> {
   const reader = body.getReader()
   const decoder = new TextDecoder()
   let buffer = ''
   let full = ''
+  let finish = ''
   while (true) {
     const { done, value } = await reader.read()
     if (done) break
@@ -77,17 +138,33 @@ export async function consumeSSE(body: ReadableStream<Uint8Array>, onDelta: (t: 
       if (payload === '[DONE]') continue
       try {
         const json = JSON.parse(payload)
-        const delta = json?.choices?.[0]?.delta?.content
-        if (delta) {
-          full += delta
-          await onDelta(delta)
+        // OpenAI
+        const choice = json?.choices?.[0]
+        if (choice) {
+          const delta = choice.delta?.content
+          if (delta) {
+            full += delta
+            await onDelta(delta)
+          }
+          if (choice.finish_reason) finish = choice.finish_reason
+          continue
         }
-      } catch {
+        // Anthropic
+        if (json?.type === 'content_block_delta' && json.delta?.text) {
+          full += json.delta.text
+          await onDelta(json.delta.text)
+        } else if (json?.type === 'message_delta' && json.delta?.stop_reason) {
+          finish = json.delta.stop_reason === 'max_tokens' ? 'length' : json.delta.stop_reason
+        } else if (json?.error) {
+          throw new LLMError('upstream', json.error.message || 'stream error')
+        }
+      } catch (e) {
+        if (e instanceof LLMError) throw e
         /* ignore partial json */
       }
     }
   }
-  return full
+  return { text: full, finish }
 }
 
 // Rough token estimate (good enough for stats/trimming)

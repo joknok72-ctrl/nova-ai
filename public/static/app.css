@@ -134,3 +134,46 @@ html[dir="ltr"] .toast { transform: translateX(-50%); }
   html[dir="ltr"] .sidebar { transform: translateX(-100%); }
   .sidebar.open { transform: none !important; }
 }
+
+/* ===== v2 additions ===== */
+.chip-static { cursor: default; }
+.chip-static:hover { background: rgba(255,255,255,.04); }
+.feature { padding: .5rem; border-radius: 10px; background: rgba(255,255,255,.02); border: 1px solid rgba(255,255,255,.04); display: flex; flex-direction: column; gap: .3rem; align-items: center; }
+.feature i { color: #a78bfa; font-size: 14px; }
+
+.files-panel { width: min(560px, 48%); flex-shrink: 0; display: flex; flex-direction: column; border-inline-start: 1px solid rgba(255,255,255,.06); background: #0d1117; }
+.files-panel.hidden { display: none; }
+@media (max-width: 1023px) { .files-panel { position: fixed; inset: 0; width: 100%; z-index: 45; } }
+.tabs { display: flex; gap: 2px; background: rgba(255,255,255,.04); border-radius: 10px; padding: 2px; }
+.tab { padding: .3rem .7rem; border-radius: 8px; font-size: .78rem; color: #94a3b8; display: flex; gap: .35rem; align-items: center; }
+.tab.active { background: rgba(139,92,246,.2); color: #fff; }
+.ft-dir { padding: .25rem .6rem; color: #94a3b8; font-weight: 700; display: flex; gap: .4rem; align-items: center; }
+.ft-file { padding: .3rem .6rem .3rem 1.4rem; color: #cbd5e1; cursor: pointer; display: flex; gap: .4rem; align-items: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; direction: ltr; text-align: left; font-family: 'JetBrains Mono', monospace; }
+.ft-file:hover { background: rgba(255,255,255,.05); }
+.ft-file.active { background: rgba(139,92,246,.18); color: #fff; }
+.ft-file i { font-size: 10px; color: #64748b; }
+#file-view { background: #0d1117; line-height: 1.6; }
+#file-view code { font-size: .78rem; }
+
+.attachment { display: flex; align-items: center; gap: .4rem; font-size: .72rem; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.08); padding: .25rem .6rem; border-radius: 8px; direction: ltr; font-family: 'JetBrains Mono', monospace; }
+.attachment button { color: #94a3b8; } .attachment button:hover { color: #f87171; }
+
+.status-chip { display: inline-flex; gap: .4rem; align-items: center; font-size: 11px; color: #a78bfa; padding: .2rem .6rem; border-radius: 999px; background: rgba(139,92,246,.12); margin-top: .4rem; }
+
+.provider-card { display: flex; gap: .7rem; align-items: center; padding: .6rem .75rem; border-radius: 12px; border: 1px solid rgba(255,255,255,.06); background: rgba(255,255,255,.03); cursor: pointer; transition: .15s; text-align: start; width: 100%; }
+.provider-card:hover { background: rgba(255,255,255,.06); }
+.provider-card.active { border-color: rgba(139,92,246,.6); background: rgba(139,92,246,.12); }
+.provider-card .pc-name { font-weight: 700; font-size: .85rem; }
+.provider-card .pc-note { font-size: .72rem; color: #94a3b8; }
+.free-badge { font-size: 10px; background: rgba(16,185,129,.15); color: #34d399; padding: 1px 7px; border-radius: 999px; margin-inline-start: auto; }
+.model-row { display: flex; align-items: center; gap: .6rem; padding: .5rem .7rem; border-radius: 10px; cursor: pointer; width: 100%; text-align: start; }
+.model-row:hover { background: rgba(255,255,255,.06); }
+.model-row.active { background: rgba(139,92,246,.15); }
+.model-row .mr-id { font-family: 'JetBrains Mono', monospace; font-size: .75rem; direction: ltr; color: #e2e8f0; }
+.model-row .mr-desc { font-size: .7rem; color: #94a3b8; }
+.tier-tag { font-size: 9px; padding: 1px 6px; border-radius: 999px; margin-inline-start: auto; flex-shrink: 0; }
+.tier-top { background: rgba(245,158,11,.15); color: #fbbf24; } .tier-fast { background: rgba(6,182,212,.15); color: #22d3ee; } .tier-other { background: rgba(255,255,255,.06); color: #94a3b8; }
+.menu-scroll { max-height: 420px; overflow-y: auto; }
+.menu-search { width: 100%; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.08); border-radius: 8px; padding: .4rem .6rem; font-size: .8rem; outline: none; margin-bottom: .3rem; direction: ltr; }
+.menu-group { font-size: 10px; color: #64748b; padding: .5rem .7rem .2rem; font-weight: 700; }
+.code-block .code-head .cb-actions { display: flex; gap: .2rem; }
