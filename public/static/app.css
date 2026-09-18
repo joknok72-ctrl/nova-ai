@@ -182,3 +182,37 @@ html[dir="ltr"] .toast { transform: translateX(-50%); }
 .net-badge { position: fixed; top: 8px; inset-inline-start: 50%; transform: translateX(50%); z-index: 70; font-size: 11px; padding: .25rem .7rem; border-radius: 999px; background: rgba(245,158,11,.15); color: #fbbf24; border: 1px solid rgba(245,158,11,.3); display: none; gap: .4rem; align-items: center; }
 html[dir="ltr"] .net-badge { transform: translateX(-50%); }
 .net-badge.show { display: inline-flex; }
+/* ===== v4: mobile-first ===== */
+.web-btn { color: #64748b; position: relative; }
+.web-btn.on { color: #34d399; }
+.web-btn.on::after { content: ''; position: absolute; top: 7px; inset-inline-end: 7px; width: 6px; height: 6px; border-radius: 50%; background: #34d399; box-shadow: 0 0 6px #34d399; }
+.icon-btn { width: 40px; height: 40px; }
+.chip { min-height: 38px; }
+.send-btn { width: 42px; height: 42px; }
+.composer textarea { font-size: 16px; }
+.menu { min-width: min(92vw, 360px); max-width: 92vw; }
+.menu-scroll { max-height: min(60vh, 460px); }
+.model-row .mr-id { font-size: .78rem; }
+.suggestion { padding: .85rem; }
+.suggestion .s-desc { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.msg .actions { opacity: 1; }
+@media (hover: hover) { .msg .actions { opacity: 0 } .msg:hover .actions { opacity: 1 } }
+.conv-item .conv-actions { display: flex; opacity: .55; }
+.provider-card .pc-body input { font-size: 16px; }
+.rotate-180 { transform: rotate(180deg); }
+@media (max-width: 640px) {
+  .hidden-xs { display: none !important; }
+  .modal-card { max-width: 100%; border-radius: 22px 22px 0 0; padding: 1rem 1rem max(1rem, env(safe-area-inset-bottom)); max-height: 92dvh; animation: sheet .25s ease; }
+  @keyframes sheet { from { transform: translateY(40px); opacity: 0 } to { transform: none; opacity: 1 } }
+  .toast { bottom: 110px; max-width: 90vw; text-align: center; }
+  .msg { gap: .55rem; } .msg .avatar { width: 28px; height: 28px; border-radius: 9px; font-size: 12px; }
+  .msg.user .bubble .content { padding: .6rem .8rem; border-radius: 14px; }
+  .prose-nova { font-size: .92rem; }
+  .code-block pre { font-size: .76rem; padding: .7rem .8rem; }
+  .code-block .code-head button { font-size: 10px; }
+  .composer { border-radius: 18px; padding: .35rem .35rem .35rem .6rem; }
+  .composer textarea { max-height: 160px; }
+  .ft-file { padding: .35rem .6rem; border-radius: 8px; background: rgba(255,255,255,.03); white-space: nowrap; flex-shrink: 0; }
+  #file-tree .ft-dir { display: none; }
+  #file-tree { max-height: 44px; }
+}
