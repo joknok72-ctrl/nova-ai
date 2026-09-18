@@ -2,7 +2,7 @@
 CREATE TABLE IF NOT EXISTS conversations (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL,
-  title TEXT NOT NULL DEFAULT 'محادثة جديدة',
+  title TEXT NOT NULL DEFAULT 'مشروع جديد',
   persona TEXT NOT NULL DEFAULT 'nova',
   model TEXT NOT NULL DEFAULT 'gpt-5.2',
   pinned INTEGER NOT NULL DEFAULT 0,

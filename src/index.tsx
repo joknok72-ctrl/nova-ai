@@ -243,7 +243,7 @@ app.post('/api/chat', async (c) => {
         const raw = await chatOnce(llm.env, cheapModel, [
           {
             role: 'system',
-            content: `Extract durable personal facts about the USER from their message that would be useful to remember in future conversations (name, job, location, preferences, goals, projects, skills, language preference). Ignore transient requests or questions. Return a JSON array of short strings in the user's language, max 3 items. If nothing durable, return [].`,
+            content: `Extract durable facts about the USER (a developer or person building software) from their message that would help in future coding sessions: their name, OS, preferred languages/frameworks/stack, skill level, project names and what they're building, tools they use (editor, hosting, DB), language preference. Ignore one-off questions and code content itself. Return a JSON array of short strings in the user's language, max 3 items. If nothing durable, return [].`,
           },
           { role: 'user', content },
         ])

@@ -1,0 +1,9 @@
+# Copy this file to .dev.vars (NEVER commit .dev.vars)
+# Any OpenAI-compatible provider works:
+#   OpenAI     : https://api.openai.com/v1
+#   Groq (free): https://api.groq.com/openai/v1
+#   OpenRouter : https://openrouter.ai/api/v1
+#   Gemini     : https://generativelanguage.googleapis.com/v1beta/openai
+#   DeepSeek   : https://api.deepseek.com/v1
+OPENAI_API_KEY=sk-your-key-here
+OPENAI_BASE_URL=https://api.openai.com/v1

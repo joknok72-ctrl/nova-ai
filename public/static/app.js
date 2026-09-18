@@ -7,8 +7,8 @@
     meta: null,
     conversations: [],
     current: null, // { id, title, persona, model, messages }
-    persona: 'nova',
-    model: 'gpt-5.2',
+    persona: 'builder',
+    model: 'gpt-5.3-codex',
     streaming: false,
     abort: null,
   }
@@ -153,40 +153,46 @@
 
   // ---------- Suggestions ----------
   const SUGGESTIONS = {
-    nova: [
-      ['fa-lightbulb', 'اشرح لي فكرة معقدة', 'اشرح لي الحوسبة الكمومية كأني في الثانوية'],
-      ['fa-list-check', 'خطة عمل', 'اعمل لي خطة أسبوعية لتعلم الإنجليزية في 30 دقيقة يومياً'],
-      ['fa-envelope', 'كتابة رسالة', 'اكتب إيميل احترافي لطلب إجازة من مديري'],
-      ['fa-scale-balanced', 'مقارنة', 'قارن بين iPhone و Android في جدول من حيث المميزات'],
+    builder: [
+      ['fa-globe', 'موقع كامل', 'ابني لي موقع Landing Page احترافي لشركة تصميم داخلي بـ HTML + Tailwind مع نموذج تواصل وقسم أعمال'],
+      ['fa-robot', 'بوت تليجرام', 'اعمل لي بوت تليجرام بـ Python يرد على الأسئلة الشائعة ويحفظ المستخدمين في SQLite'],
+      ['fa-cart-shopping', 'متجر إلكتروني', 'ابني متجر إلكتروني بـ Next.js + Tailwind: صفحة منتجات، سلة، وصفحة دفع تجريبية'],
+      ['fa-terminal', 'سكريبت مفيد', 'اكتب سكريبت Python ينزل كل الفيديوهات من قائمة تشغيل يوتيوب ويحولها MP3'],
     ],
-    coder: [
-      ['fa-python', 'كود Python', 'اكتب سكريبت Python ينظم الملفات في مجلد حسب النوع'],
-      ['fa-bug', 'تصحيح خطأ', 'ليه بيظهر لي TypeError: cannot read property of undefined في JavaScript؟'],
-      ['fa-database', 'SQL', 'اكتب query يجيب أعلى 5 عملاء من حيث المبيعات مع شرح'],
-      ['fa-globe', 'موقع ويب', 'اعمل لي صفحة Landing Page بـ HTML و Tailwind لتطبيق توصيل'],
+    debugger: [
+      ['fa-bug', 'خطأ JavaScript', "عندي خطأ: TypeError: Cannot read properties of undefined (reading 'map') في React — إيه السبب والحل؟"],
+      ['fa-python', 'خطأ Python', 'الكود بيطلع ModuleNotFoundError رغم إني عملت pip install — إيه المشكلة؟'],
+      ['fa-database', 'مشكلة SQL', 'الـ query بطيء جداً على جدول فيه مليون صف — كيف أسرّعه؟'],
+      ['fa-wifi', 'CORS', 'الـ API بيرجع CORS error من الـ frontend — كيف أحلها في Express؟'],
     ],
-    teacher: [
-      ['fa-atom', 'فيزياء', 'اشرح لي النسبية الخاصة بمثال بسيط'],
-      ['fa-calculator', 'رياضيات', 'علمني التفاضل من الصفر خطوة بخطوة'],
-      ['fa-language', 'لغات', 'اشرح لي الفرق بين Present Perfect و Past Simple'],
-      ['fa-landmark', 'تاريخ', 'لخّص لي أسباب الحرب العالمية الأولى'],
+    reviewer: [
+      ['fa-shield-halved', 'مراجعة أمان', 'راجع لي كود تسجيل الدخول ده من ناحية الأمان: (الصق الكود)'],
+      ['fa-gauge-high', 'مراجعة أداء', 'راجع الـ function دي وحسّن أداءها: (الصق الكود)'],
+      ['fa-broom', 'Clean Code', 'نظّف وأعد هيكلة الكود ده بأفضل الممارسات: (الصق الكود)'],
+      ['fa-vial', 'اختبارات', 'اكتب Unit Tests كاملة للكود ده: (الصق الكود)'],
     ],
-    analyst: [
-      ['fa-briefcase', 'قرار عمل', 'أفتح مطعم أو كافيه؟ حلل الخيارين بميزانية 500 ألف جنيه'],
-      ['fa-chart-pie', 'تحليل سوق', 'حلل سوق التجارة الإلكترونية في مصر 2026'],
-      ['fa-money-bill-trend-up', 'استثمار', 'قارن بين الذهب والعقارات والأسهم كاستثمار طويل المدى'],
-      ['fa-diagram-project', 'استراتيجية', 'اعمل SWOT analysis لشركة ناشئة في مجال التعليم الإلكتروني'],
+    architect: [
+      ['fa-sitemap', 'تصميم نظام', 'صمّم لي معمارية كاملة لتطبيق توصيل طلبات زي Talabat: قاعدة بيانات + APIs + بنية المشروع'],
+      ['fa-table', 'قاعدة بيانات', 'صمّم Schema كامل لنظام إدارة مدرسة (طلاب، معلمين، حصص، درجات) بـ PostgreSQL'],
+      ['fa-plug', 'تصميم API', 'صمّم REST API كامل لتطبيق ملاحظات مع Auth بـ JWT'],
+      ['fa-cubes', 'Microservices', 'قارن Monolith vs Microservices لمشروع SaaS ناشئ وقرر الأفضل'],
     ],
-    creative: [
-      ['fa-book-open', 'قصة قصيرة', 'اكتب قصة قصيرة عن روبوت يتعلم الحب'],
-      ['fa-bullhorn', 'إعلان', 'اكتب 5 أفكار إعلانات لمشروع عطور جديد'],
-      ['fa-music', 'شعر', 'اكتب قصيدة عن القاهرة في الفجر'],
-      ['fa-pen-nib', 'محتوى', 'اكتب 10 أفكار لفيديوهات TikTok عن الطبخ'],
+    mentor: [
+      ['fa-seedling', 'ابدأ من الصفر', 'أنا مبتدئ تماماً — علمني أساسيات Python بأمثلة عملية'],
+      ['fa-code-branch', 'Git', 'اشرح لي Git و GitHub من الصفر بأوامر حقيقية'],
+      ['fa-arrows-spin', 'Async', 'اشرح لي async/await في JavaScript بمثال بسيط ثم مثال حقيقي'],
+      ['fa-layer-group', 'OOP', 'اشرح لي البرمجة الكائنية (OOP) بمثال من الحياة ثم كود Python'],
+    ],
+    devops: [
+      ['fa-docker', 'Docker', 'اعمل لي Dockerfile و docker-compose لتطبيق Node.js + PostgreSQL + Redis'],
+      ['fa-rocket', 'CI/CD', 'اكتب GitHub Actions workflow يختبر وينشر تطبيق Next.js على Vercel تلقائياً'],
+      ['fa-linux', 'سيرفر Linux', 'خطوات تجهيز سيرفر Ubuntu من الصفر لتشغيل تطبيق ويب مع Nginx و SSL'],
+      ['fa-cloud', 'Cloudflare', 'كيف أنشر تطبيق Hono على Cloudflare Workers مع قاعدة بيانات D1؟'],
     ],
   }
   function renderSuggestions() {
     const box = $('#suggestions'); box.innerHTML = ''
-    for (const [icon, title, prompt] of SUGGESTIONS[state.persona] || SUGGESTIONS.nova) {
+    for (const [icon, title, prompt] of SUGGESTIONS[state.persona] || SUGGESTIONS.builder) {
       const b = el('button', 'suggestion')
       b.innerHTML = `<i class="fas ${icon}"></i><div class="s-title">${title}</div><div class="s-desc">${prompt}</div>`
       b.onclick = () => { $('#composer-input').value = prompt; autoGrow(); send() }
@@ -305,7 +311,7 @@
           if (!data) continue
           const j = JSON.parse(data)
           if (type === 'meta') {
-            if (!state.current) { state.current = { id: j.conversation_id, persona: j.persona, model: j.model, title: 'محادثة جديدة' }; history.replaceState(null, '', `#${j.conversation_id}`); refreshConversations() }
+            if (!state.current) { state.current = { id: j.conversation_id, persona: j.persona, model: j.model, title: 'مشروع جديد' }; history.replaceState(null, '', `#${j.conversation_id}`); refreshConversations() }
           } else if (type === 'delta') {
             full += j.t; started = true
             if (!rafPending) { rafPending = true; requestAnimationFrame(paint) }
@@ -344,7 +350,7 @@
   $('#btn-delete').onclick = () => state.current && deleteConversation(state.current.id)
   $('#btn-export').onclick = () => {
     if (!state.current) return
-    const parts = [...msgList.querySelectorAll('.msg')].map((m) => `### ${m.classList.contains('user') ? '👤 أنت' : '✨ NOVA'}\n\n${m.dataset.raw}`)
+    const parts = [...msgList.querySelectorAll('.msg')].map((m) => `### ${m.classList.contains('user') ? '👤 أنت' : '⚡ NOVA CODE'}\n\n${m.dataset.raw}`)
     const blob = new Blob([`# ${state.current.title}\n\n${parts.join('\n\n---\n\n')}`], { type: 'text/markdown' })
     const a = el('a'); a.href = URL.createObjectURL(blob); a.download = `${state.current.title}.md`; a.click()
   }
@@ -422,18 +428,18 @@
 
   $('#btn-about').onclick = () => {
     const box = el('div', 'prose-nova text-sm')
-    box.innerHTML = md(`**NOVA** منصة ذكاء اصطناعي متقدمة مبنية على أحدث التقنيات:
+    box.innerHTML = md(`**NOVA CODE** مهندس برمجيات بالذكاء الاصطناعي — يبني، يصلح، يراجع، ويصمّم أي كود:
 
-- ⚡ **Hono + TypeScript** على Cloudflare Edge — استجابة فورية من أقرب نقطة لك
-- 🗄️ **Cloudflare D1** — محادثاتك وذاكرتك محفوظة بأمان
-- 🧠 **ذاكرة طويلة المدى** — يتعلم عنك تلقائياً ويتذكر في كل محادثة
-- 🎭 **5 شخصيات** — نوفا، المبرمج، المعلم، المحلل، المبدع
-- 🚀 **4 نماذج LLM** — من الأسرع إلى الأقوى
-- 📝 **Markdown + تلوين الكود** مع نسخ بضغطة واحدة
-- 🔄 **Streaming** — الرد يظهر لحظياً كلمة بكلمة
+- 🏗️ **6 أوضاع متخصصة** — البنّاء، المُصحِّح، المُراجِع، المهندس المعماري، المُعلِّم، DevOps
+- 📦 **مشاريع كاملة** — ملفات كاملة قابلة للتشغيل فوراً + أوامر التشغيل والنشر، بدون placeholders
+- 🧠 **ذاكرة طويلة المدى** — يتذكر الـ stack بتاعك ومشاريعك ومستواك
+- 🔄 **Streaming** — الكود يظهر لحظياً مع زر إيقاف وإعادة توليد
+- 🎨 **تلوين الكود** + نسخ بضغطة + تصدير Markdown
+- 🔑 **BYOK** — استخدم مفتاح API خاص بك من أي مزود (OpenAI, Groq, OpenRouter, Gemini, DeepSeek...)
+- ⚡ **Hono + Cloudflare D1** — يعمل على الـ Edge عالمياً
 
-لا يحتاج تسجيل: هويتك محفوظة في متصفحك تلقائياً.`)
-    openModal('✨ عن NOVA', box)
+**نصيحة:** لو المشروع كبير وتوقف الرد، اكتب «كمّل» وسيستكمل من حيث توقف.`)
+    openModal('⚡ عن NOVA CODE', box)
   }
 
   // ---------- Init ----------
