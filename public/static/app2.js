@@ -1,7 +1,7 @@
 /* NOVA CODE frontend v2 — part 2: messages, files, preview, streaming, settings */
 ;(() => {
   const N = window.N
-  const { $, el, esc, state, settings, saveSettings, usingByok, byokHeaders, detectOS, md, toast, api, openSidebar, renderConversations, refreshConversations, deleteConversation, currentModels, setModelUI, closeMenus, refreshModels, updateKeyStatus, renderSuggestions } = N
+  const { $, el, esc, isMobile, state, settings, saveSettings, connected, activeProv, usingByok, byokHeaders, detectOS, provInfo, md, toast, api, openSidebar, renderConversations, refreshConversations, deleteConversation, allModelGroups, findModel, setModelUI, setModel, closeMenus, refreshProvider, refreshAllProviders, updateKeyStatus, renderSuggestions } = N
 
   // ---------- Messages ----------
   const msgList = $('#message-list'), welcome = $('#welcome'), messagesBox = $('#messages')
@@ -42,7 +42,7 @@
     const conv = await N.store.getConversation(id); if (!conv) return newChat()
     conv.messages = await N.store.listMessages(id)
     state.current = conv
-    if (conv.model && currentModels().some((m) => m.id === conv.model)) { state.model = conv.model; setModelUI() }
+    if (conv.model && findModel(conv.provider ?? state.providerId, conv.model)) { state.providerId = conv.provider ?? state.providerId; state.model = conv.model; setModelUI() }
     msgList.innerHTML = ''; state.files = {}
     for (const m of conv.messages) { addMessage(m.role, m.content); if (m.role === 'assistant') extractFiles(m.content) }
     showChat(); scrollBottom(true); renderConversations(); updateFilesButton()
@@ -185,7 +185,7 @@
     input.value = ''; autoGrow()
     let text = content
     if (attachments.length) text = (content || 'Here are my files:') + attachments.map((a) => `\n\n### 📎 ${a.name}\n\`\`\`${(a.name.split('.').pop() || '').slice(0, 12)}\n${a.content}\n\`\`\``).join('')
-    if (!state.current) { state.current = await N.store.createConversation(state.model); history.replaceState(null, '', `#${state.current.id}`); refreshConversations() }
+    if (!state.current) { state.current = await N.store.createConversation(state.model, state.providerId); history.replaceState(null, '', `#${state.current.id}`); refreshConversations() }
     const id = await N.store.addMessage(state.current.id, 'user', text)
     addMessage('user', text)
     await streamRequest({ userMsgId: id })
@@ -203,18 +203,17 @@
     setStreaming(true)
     const bubble = addMessage('assistant', '', { thinking: true })
     const contentEl = bubble.querySelector('.content')
-    let full = '', raf = false, lastPaint = 0, doneInfo = null
+    let full = '', raf = false, lastPaint = 0, doneInfo = null, toolLog = []
     const paint = () => { raf = false; lastPaint = performance.now(); contentEl.innerHTML = md(full); contentEl.classList.add('typing-cursor'); scrollBottom() }
     const schedule = () => { if (raf) return; raf = true; setTimeout(() => requestAnimationFrame(paint), Math.max(0, 90 - (performance.now() - lastPaint))) }
     $('#status-line').textContent = 'NOVA يفكر ويكتب…'
     state.abort = new AbortController()
     const convId = state.current.id
     const msgs = await N.store.listMessages(convId)
-    const memories = (await N.store.listMemories()).map((m) => m.fact)
     const isFirst = msgs.filter((m) => m.role === 'user').length === 1
     try {
       const res = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json', ...byokHeaders() }, signal: state.abort.signal,
-        body: JSON.stringify({ messages: msgs.map((m) => ({ role: m.role, content: m.content })), memories, model: state.model, os: detectOS(), want_title: isFirst && !payload.regenerate, want_facts: !payload.regenerate }) })
+        body: JSON.stringify({ messages: msgs.map((m) => ({ role: m.role, content: m.content })), instructions: settings.instructions || '', web: settings.web !== false, model: state.model, os: detectOS(), want_title: isFirst && !payload.regenerate }) })
       if (!res.ok) { const j = await res.json().catch(() => ({})); const e = new Error(j.message || j.error || 'request failed'); e.code = j.error; throw e }
       const reader = res.body.getReader(), dec = new TextDecoder(); let buf = ''
       while (true) {
@@ -228,7 +227,8 @@
           const j = JSON.parse(data)
           if (type === 'meta') { /* stateless server */ }
           else if (type === 'delta') { full += j.t; schedule() }
-          else if (type === 'status') { $('#status-line').textContent = `الرد طويل — NOVA يكمل تلقائياً (جزء ${j.pass + 1})…` }
+          else if (type === 'status') { $('#status-line').textContent = j.s === 'search' ? `🔍 يبحث على النت: ${j.q}` : j.s === 'fetch' ? `📄 يقرأ: ${j.url.slice(0, 60)}` : `الرد طويل — يكمل تلقائياً (جزء ${j.pass + 1})…`; if (j.s === 'search' || j.s === 'fetch') { contentEl.innerHTML = `<div class="thinking"><span></span><span></span><span></span></div><div class="status-chip"><i class="fas ${j.s === 'search' ? 'fa-magnifying-glass' : 'fa-file-lines'}"></i> ${esc(j.s === 'search' ? j.q : j.url.slice(0, 60))}</div>` } }
+          else if (type === 'tools') { toolLog = j.log }
           else if (type === 'error') { const e = new Error(j.message); e.code = j.code; throw e }
           else if (type === 'done') { doneInfo = j }
         }
@@ -238,7 +238,7 @@
       await N.store.addMessage(convId, 'assistant', full, doneInfo?.tokens || 0)
       await N.store.bumpUsage((doneInfo?.tokens || 0))
       if (doneInfo?.title && state.current) { state.current.title = doneInfo.title; await N.store.updateConversation(convId, { title: doneInfo.title }) }
-      for (const f of doneInfo?.facts || []) await N.store.addMemory(f)
+      if (toolLog.length) { const t = el('div', 'text-[11px] text-slate-500 mt-2 flex flex-wrap gap-1'); t.innerHTML = toolLog.map((x) => `<span class="status-chip !mt-0">${esc(x.slice(0, 70))}</span>`).join(''); contentEl.appendChild(t) }
       const n = extractFiles(full); updateFilesButton()
       if (n > 0 && $('#files-panel').classList.contains('hidden') && window.innerWidth >= 1024) { openFiles(Object.keys(state.files).some((p) => /\.html?$/.test(p)) ? 'preview' : 'files'); toast(`تم استخراج ${Object.keys(state.files).length} ملف — يمكنك تنزيلها ZIP`) }
     } catch (err) {
@@ -254,7 +254,7 @@
     } finally {
       contentEl.classList.remove('typing-cursor'); setStreaming(false); state.abort = null
       $('#status-line').textContent = DEFAULT_STATUS
-      refreshConversations(); refreshMemoryCount()
+      refreshConversations()
     }
   }
 
@@ -270,78 +270,78 @@
   $('#modal-close').onclick = closeModal
   modal.onclick = (e) => { if (e.target === modal) closeModal() }
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeModal(); closeMenus() } })
-  async function refreshMemoryCount() { try { const m = await N.store.listMemories(); $('#memory-count').textContent = m.length } catch {} }
 
-  // ---------- Settings / Provider ----------
-  function openSettings() {
+  // ---------- Settings: multiple providers connected at once ----------
+  function openSettings(focusId) {
     const P = state.meta.providers
-    const box = el('div', 'space-y-4 text-sm')
-    box.innerHTML = `
-      <p class="text-slate-400 leading-relaxed">اختر المزود وضع مفتاحك — <b class="text-slate-200">المفتاح يُحفظ في متصفحك فقط</b>. سيتم جلب <b class="text-emerald-300">كل النماذج المتاحة لحسابك</b> تلقائياً (حتى الجديدة).</p>
-      <div id="prov-list" class="grid gap-2"></div>
-      <div id="prov-form" class="space-y-3 pt-1">
-        <div class="flex items-center justify-between"><span class="text-xs text-slate-400">مفتاح API</span><a id="key-link" target="_blank" class="text-xs text-violet-300 hover:underline hidden"><i class="fas fa-up-right-from-square"></i> احصل على مفتاح من هنا</a></div>
-        <input id="s-key" type="password" class="input-dark mono" dir="ltr" placeholder="AIza... / sk-... / gsk_..." autocomplete="off">
-        <div id="custom-base" class="hidden"><span class="text-xs text-slate-400 block mb-1">Base URL</span><input id="s-base" class="input-dark mono" dir="ltr" placeholder="http://localhost:11434/v1"></div>
-        <div id="disc-result" class="text-xs"></div>
-        <div class="flex gap-2 justify-end pt-1"><button id="s-clear" class="chip hover:text-red-300">مسح</button><button id="s-save" class="btn-primary !py-2 !px-5"><i class="fas fa-plug"></i> اتصال وجلب النماذج</button></div>
-      </div>`
-    let chosen = P.find((p) => p.id === (settings.provider || 'gemini')) || P[0]
+    const box = el('div', 'space-y-3 text-sm')
+    box.innerHTML = `<p class="text-slate-400 leading-relaxed text-xs">أضف مفتاحاً لأي عدد من المزودين — <b class="text-slate-200">كلهم يعملون معاً</b> وتختار النموذج من أي واحد. المفاتيح <b class="text-slate-200">في متصفحك فقط</b>. كل مزود يُظهر <b class="text-emerald-300">كل نماذج حسابك</b> تلقائياً (حتى الجديدة).</p><div id="prov-list" class="grid gap-2"></div>`
     const list = box.querySelector('#prov-list')
     const icons = { gemini: 'fa-brands fa-google text-blue-400', openai: 'fas fa-brain text-emerald-400', anthropic: 'fas fa-a text-orange-400', groq: 'fas fa-bolt text-amber-400', openrouter: 'fas fa-route text-violet-400', deepseek: 'fas fa-water text-sky-400', mistral: 'fas fa-wind text-orange-300', together: 'fas fa-people-group text-pink-400', xai: 'fas fa-x text-slate-300', custom: 'fas fa-server text-slate-400' }
-    const renderProv = () => {
+    let open = focusId || null
+    const render = () => {
       list.innerHTML = ''
       for (const p of P) {
-        const c = el('button', 'provider-card' + (p.id === chosen.id ? ' active' : ''))
-        c.innerHTML = `<i class="${icons[p.id] || 'fas fa-server'} w-4 text-center"></i><span class="min-w-0"><div class="pc-name">${esc(p.name)}</div><div class="pc-note">${esc(p.note)}</div></span>${p.free ? '<span class="free-badge">مجاني</span>' : ''}`
-        c.onclick = () => { chosen = p; renderProv(); syncForm() }
-        list.appendChild(c)
+        const saved = settings.providers[p.id]
+        const isOn = !!saved?.apiKey
+        const card = el('div', 'provider-card flex-col !items-stretch !cursor-default' + (isOn ? ' active' : ''))
+        card.innerHTML = `<button class="flex items-center gap-3 w-full text-start pc-head"><i class="${icons[p.id] || 'fas fa-server'} w-4 text-center"></i><span class="min-w-0 flex-1"><div class="pc-name">${esc(p.name)} ${isOn ? `<span class="text-emerald-400 text-xs"><i class="fas fa-circle-check"></i> ${saved.models?.length || 0} نموذج</span>` : ''}</div><div class="pc-note">${esc(p.note)}</div></span>${p.free ? '<span class="free-badge">مجاني</span>' : ''}<i class="fas fa-chevron-down text-xs opacity-50 ms-2 ${open === p.id ? 'rotate-180' : ''}"></i></button>
+          <div class="pc-body ${open === p.id ? '' : 'hidden'} pt-3 space-y-2">
+            ${p.keyUrl ? `<a href="${p.keyUrl}" target="_blank" class="text-xs text-violet-300 hover:underline"><i class="fas fa-up-right-from-square"></i> احصل على مفتاح من ${esc(p.name.split(' ')[0])}</a>` : ''}
+            <input class="input-dark mono s-key" type="password" dir="ltr" placeholder="${p.id === 'gemini' ? 'AIza...' : p.id === 'groq' ? 'gsk_...' : 'sk-...'}" autocomplete="off" value="${esc(saved?.apiKey || '')}">
+            ${p.id === 'custom' ? `<input class="input-dark mono s-base" dir="ltr" placeholder="Base URL — e.g. http://localhost:11434/v1" value="${esc(saved?.baseUrl || '')}">` : ''}
+            <div class="s-res text-xs"></div>
+            <div class="flex gap-2 justify-end flex-wrap">${isOn ? '<button class="chip hover:text-red-300 s-del"><i class="fas fa-trash"></i> إزالة</button><button class="chip s-refresh"><i class="fas fa-rotate"></i> تحديث النماذج</button>' : ''}<button class="btn-primary !py-2 !px-4 s-save"><i class="fas fa-plug"></i> ${isOn ? 'حفظ' : 'اتصال'}</button></div>
+          </div>`
+        card.querySelector('.pc-head').onclick = () => { open = open === p.id ? null : p.id; render() }
+        const body = card.querySelector('.pc-body')
+        const res = body.querySelector('.s-res')
+        body.querySelector('.s-save').onclick = async (e) => {
+          const key = body.querySelector('.s-key').value.trim(); const base = p.id === 'custom' ? (body.querySelector('.s-base').value.trim().replace(/\/$/, '')) : p.baseUrl
+          if (!key) return toast('ضع مفتاح API أولاً'); if (!base) return toast('ضع Base URL')
+          const btn = e.currentTarget; btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> جاري الاتصال…'
+          const prev = settings.providers[p.id]
+          settings.providers[p.id] = { apiKey: key, baseUrl: base, models: prev?.models || [], cheap: prev?.cheap || '' }
+          try {
+            const r = await refreshProvider(p.id, false)
+            if (!settings.active || !connected().some(([id]) => id === settings.active)) { setModel(p.id, r.models.find((m) => m.recommended)?.id || r.models[0]?.id || '') }
+            saveSettings(); updateKeyStatus(); setModelUI()
+            toast(`${p.name}: متصل — ${r.models.length} نموذج`, 3000); open = null; render()
+          } catch (err) { if (prev) settings.providers[p.id] = prev; else delete settings.providers[p.id]; saveSettings(); res.innerHTML = `<span class="text-red-300"><i class="fas fa-triangle-exclamation"></i> ${esc(err.message)}</span>`; btn.disabled = false; btn.innerHTML = '<i class="fas fa-plug"></i> اتصال' }
+        }
+        body.querySelector('.s-del')?.addEventListener('click', () => { delete settings.providers[p.id]; if (settings.active === p.id) { const first = connected()[0]; if (first) setModel(first[0], first[1].models?.find((m) => m.recommended)?.id || first[1].models?.[0]?.id || ''); else { settings.active = ''; state.providerId = ''; state.model = state.meta.defaults.model; settings.model = '' } } saveSettings(); updateKeyStatus(); setModelUI(); render(); toast('تمت الإزالة') })
+        body.querySelector('.s-refresh')?.addEventListener('click', async (e) => { const b = e.currentTarget; b.innerHTML = '<i class="fas fa-spinner fa-spin"></i>'; try { await refreshProvider(p.id, true); render() } catch (err) { toast(err.message, 3500); b.innerHTML = '<i class="fas fa-rotate"></i> تحديث' } })
+        list.appendChild(card)
       }
     }
-    const syncForm = () => {
-      const link = box.querySelector('#key-link'); link.classList.toggle('hidden', !chosen.keyUrl); link.href = chosen.keyUrl
-      box.querySelector('#custom-base').classList.toggle('hidden', chosen.id !== 'custom')
-      box.querySelector('#s-key').value = settings.provider === chosen.id ? settings.apiKey : ''
-      box.querySelector('#s-base').value = settings.provider === chosen.id ? settings.baseUrl : ''
-      box.querySelector('#disc-result').innerHTML = settings.provider === chosen.id && settings.models?.length ? `<span class="text-emerald-300"><i class="fas fa-check"></i> متصل — ${settings.models.length} نموذج · المختار: <span class="mono" dir="ltr">${esc(settings.model)}</span></span>` : ''
-    }
-    renderProv(); syncForm()
-    box.querySelector('#s-save').onclick = async (e) => {
-      const key = box.querySelector('#s-key').value.trim(); const base = chosen.id === 'custom' ? box.querySelector('#s-base').value.trim().replace(/\/$/, '') : chosen.baseUrl
-      if (!key) return toast('ضع مفتاح API أولاً'); if (!base) return toast('ضع Base URL')
-      const btn = e.currentTarget; btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> جاري الاتصال…'
-      const res = box.querySelector('#disc-result'); res.innerHTML = ''
-      const prev = { ...settings }
-      Object.assign(settings, { provider: chosen.id, apiKey: key, baseUrl: base, models: null, model: '' })
-      try {
-        const r = await refreshModels(false)
-        res.innerHTML = `<span class="text-emerald-300"><i class="fas fa-check"></i> تم! ${r.models.length} نموذج متاح · تم اختيار الأفضل للبرمجة: <span class="mono" dir="ltr">${esc(settings.model)}</span></span>`
-        setModelUI(); updateKeyStatus(); toast(`متصل بـ ${chosen.name} — ${r.models.length} نموذج`, 3500)
-        setTimeout(closeModal, 900)
-      } catch (err) {
-        Object.assign(settings, prev); saveSettings()
-        res.innerHTML = `<span class="text-red-300"><i class="fas fa-triangle-exclamation"></i> ${esc(err.message)}</span>`
-      } finally { btn.disabled = false; btn.innerHTML = '<i class="fas fa-plug"></i> اتصال وجلب النماذج' }
-    }
-    box.querySelector('#s-clear').onclick = () => { Object.assign(settings, { provider: '', apiKey: '', baseUrl: '', model: '', cheapModel: '', models: null }); saveSettings(); state.model = state.meta.defaults.model; setModelUI(); updateKeyStatus(); closeModal(); toast('تم المسح') }
-    openModal('🔑 المزود و مفتاح API', box)
+    render()
+    openModal('🔑 المزودون و مفاتيح API', box)
   }
+
+  // ---------- Standing instructions (user-authored base prompt — nothing else is mixed in) ----------
+  function openInstructions() {
+    const box = el('div', 'space-y-3 text-sm')
+    box.innerHTML = `<p class="text-slate-400 text-xs leading-relaxed">تعليمات ثابتة تُرسل مع <b class="text-slate-200">كل رسالة</b> كأساس يلتزم به NOVA. أنت الوحيد الذي يكتبها — لا يُضاف إليها شيء تلقائياً. مثال: «أستخدم Android فقط»، «اكتب كل شيء بـ Python»، «اشرح بالمصري»، «مشروعي اسمه X ويستخدم Firebase».</p>
+      <textarea id="ins-text" class="input-dark w-full min-h-[200px] leading-relaxed" placeholder="اكتب تعليماتك هنا…"></textarea>
+      <div class="flex items-center justify-between gap-2 flex-wrap"><span id="ins-count" class="text-[11px] text-slate-500"></span><div class="flex gap-2"><button id="ins-clear" class="chip hover:text-red-300">مسح</button><button id="ins-save" class="btn-primary !py-2 !px-5"><i class="fas fa-check"></i> حفظ</button></div></div>
+      <details class="text-xs text-slate-500"><summary class="cursor-pointer">أمثلة جاهزة</summary><div class="grid gap-1 mt-2" id="ins-ex"></div></details>`
+    const ta = box.querySelector('#ins-text'); ta.value = settings.instructions || ''
+    const cnt = () => (box.querySelector('#ins-count').textContent = `${ta.value.length} / 8000 حرف`); ta.oninput = cnt; cnt()
+    for (const ex of ['أنا مبتدئ تماماً وأستخدم الهاتف (Android) فقط — اشرح كل خطوة بالتفصيل وبالمصري، واختر حلولاً تعمل من الهاتف (Termux / مواقع بدون تنصيب).', 'أستخدم Windows 11 و VS Code. أفضّل Python للسكربتات و HTML+Tailwind للمواقع. لا تستخدم TypeScript.', 'كل المشاريع لازم تكون قابلة للنشر مجاناً على Cloudflare Pages أو GitHub Pages، وبدون قواعد بيانات مدفوعة.']) { const b = el('button', 'text-start p-2 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300', esc(ex)); b.onclick = () => { ta.value = (ta.value ? ta.value + '\n' : '') + ex; cnt() }; box.querySelector('#ins-ex').appendChild(b) }
+    box.querySelector('#ins-save').onclick = () => { settings.instructions = ta.value.slice(0, 8000); saveSettings(); updateInsBadge(); closeModal(); toast('تم حفظ التعليمات') }
+    box.querySelector('#ins-clear').onclick = () => { ta.value = ''; cnt() }
+    openModal('🧠 تعليماتي الأساسية', box)
+  }
+  const updateInsBadge = () => { const b = $('#ins-status'); if (b) { b.textContent = settings.instructions ? 'مفعّلة' : ''; b.style.color = settings.instructions ? '#34d399' : '' } }
+  $('#btn-instructions').onclick = openInstructions
+
+  // web toggle
+  const syncWeb = () => { const b = $('#btn-web'); b.classList.toggle('on', settings.web !== false); b.title = settings.web !== false ? 'البحث على النت مفعّل — NOVA يبحث عند الحاجة' : 'البحث على النت متوقف' }
+  $('#btn-web').onclick = () => { settings.web = settings.web === false; saveSettings(); syncWeb(); toast(settings.web !== false ? 'البحث على النت: مفعّل' : 'البحث على النت: متوقف') }
+  syncWeb()
+
   $('#btn-settings').onclick = openSettings
 
-  $('#btn-memory').onclick = async () => {
-    const mems = await N.store.listMemories()
-    const box = el('div', 'space-y-3')
-    box.innerHTML = `<p class="text-sm text-slate-400">NOVA يتذكر هذه الحقائق تلقائياً (نظامك، مستواك، مشاريعك، الأدوات التي تستخدمها) ويستخدمها في كل مشروع.</p>`
-    const form = el('form', 'flex gap-2'); form.innerHTML = `<input class="input-dark" placeholder="أضف حقيقة… مثال: أستخدم Windows 11 ومبتدئ" required><button class="btn-primary !py-2 !px-4"><i class="fas fa-plus"></i></button>`
-    form.onsubmit = async (e) => { e.preventDefault(); await N.store.addMemory(form.querySelector('input').value); $('#btn-memory').click(); refreshMemoryCount() }
-    box.appendChild(form)
-    const list = el('div', 'space-y-2')
-    if (!mems.length) list.innerHTML = `<p class="text-center text-slate-500 text-sm py-6">لا توجد ذكريات بعد — ابدأ مشروعاً وعرّف NOVA بنفسك.</p>`
-    for (const m of mems) { const it = el('div', 'memory-item', `<i class="fas fa-brain text-pink-400 mt-1 text-xs"></i><span></span><button title="حذف"><i class="fas fa-times"></i></button>`); it.querySelector('span').textContent = m.fact; it.querySelector('button').onclick = async () => { await N.store.deleteMemory(m.id); it.remove(); refreshMemoryCount() }; list.appendChild(it) }
-    box.appendChild(list)
-    if (mems.length) { const clr = el('button', 'text-xs text-red-400 hover:underline', 'مسح كل الذاكرة'); clr.onclick = async () => { if (confirm('مسح كل الذاكرة؟')) { await N.store.clearMemories(); closeModal(); refreshMemoryCount() } }; box.appendChild(clr) }
-    openModal('🧠 الذاكرة طويلة المدى', box)
-  }
   $('#btn-backup').onclick = () => {
     const box = el('div', 'space-y-4 text-sm')
     box.innerHTML = `<p class="text-slate-400 leading-relaxed">كل بياناتك (المشاريع، الرسائل، الذاكرة، الإعدادات) محفوظة <b class="text-slate-200">على جهازك فقط</b> ولا تُرسل لأي خادم. صدّرها كملف لتنقلها لجهاز آخر أو للاحتفاظ بنسخة.</p>
@@ -372,13 +372,15 @@
 - 🗂️ **مستعرض ملفات المشروع** + **معاينة حية** للمواقع + **تنزيل ZIP**
 - 🔁 **إكمال تلقائي** — لو الرد طويل يكمل من نفسه حتى 4 مرات
 - 📎 **إرفاق ملفات كود** لإصلاحها أو تطويرها
-- 🧠 **ذاكرة طويلة المدى** — يتذكر نظامك ومستواك ومشاريعك
+- 🌐 **يبحث على النت بنفسه** عند الحاجة (أحدث المكتبات، الأخطاء، التوثيق)
+- 🧠 **تعليماتك الأساسية** — برومبت ثابت تكتبه أنت يُرسل مع كل رسالة
+- 🔑 **عدة مزودين معاً** — Gemini + Groq + OpenAI + Claude… بمفاتيح متعددة، والنماذج مقسّمة حسب المزود
 - 🔑 **أي مزود** — Gemini (مجاني) / Groq (مجاني) / OpenAI / Claude / DeepSeek / OpenRouter / Ollama محلي — مع جلب **كل النماذج** المتاحة لحسابك لحظياً
 - 🌍 عربي/إنجليزي · Hono + Cloudflare D1 على الـ Edge`)
     openModal('⚡ عن NOVA CODE', box)
   }
 
-  Object.assign(N, { input, autoGrow, send, openSettings, loadConversation, newChat, openModal, closeModal, downloadText })
+  Object.assign(N, { input, autoGrow, send, openSettings, openInstructions, loadConversation, newChat, openModal, closeModal, downloadText })
 
   // ---------- Offline awareness ----------
   const netBadge = $('#net-badge')
@@ -389,14 +391,13 @@
   ;(async () => {
     try { state.meta = await api('/api/meta'); localStorage.setItem('nova_meta', JSON.stringify(state.meta)) }
     catch { state.meta = JSON.parse(localStorage.getItem('nova_meta') || 'null'); if (!state.meta) throw new Error('أول تشغيل يحتاج إنترنت مرة واحدة فقط') }
-    state.model = usingByok() && settings.model ? settings.model : state.meta.defaults.model
-    setModelUI(); renderSuggestions(); updateKeyStatus()
-    refreshMemoryCount()
+    if (settings.active && settings.providers[settings.active]?.apiKey) { state.providerId = settings.active; state.model = settings.model || '' } else { state.providerId = ''; state.model = state.meta.defaults.model }
+    setModelUI(); renderSuggestions(); updateKeyStatus(); updateInsBadge()
     await refreshConversations()
     const hash = location.hash.slice(1)
     if (hash && state.conversations.some((c) => c.id === hash)) loadConversation(hash)
-    if (usingByok()) refreshModels(false).catch(() => {})
-    if (!usingByok() && !state.meta.server_key_configured) setTimeout(openSettings, 500)
+    if (connected().length) refreshAllProviders().catch(() => {})
+    if (!connected().length && !state.meta.server_key_configured) setTimeout(() => openSettings('gemini'), 500)
     input.focus()
   })().catch((e) => toast('خطأ في التحميل: ' + e.message))
 })()

@@ -31,8 +31,8 @@ window.N = window.N || {}
       return all.sort((a, b) => (b.pinned - a.pinned) || (b.updated_at > a.updated_at ? 1 : -1))
     },
     getConversation(id) { return tx('conversations', 'readonly', (s) => req(s.conversations.get(id))) },
-    async createConversation(model) {
-      const c = { id: uid(), title: 'مشروع جديد', model, pinned: 0, created_at: now(), updated_at: now() }
+    async createConversation(model, provider = '') {
+      const c = { id: uid(), title: 'مشروع جديد', model, provider, pinned: 0, created_at: now(), updated_at: now() }
       await tx('conversations', 'readwrite', (s) => req(s.conversations.put(c)))
       return c
     },
@@ -84,7 +84,7 @@ window.N = window.N || {}
     async exportAll() {
       const [conversations, memories, usage] = await Promise.all([this.listConversations(), this.listMemories(), this.getKV('usage', null)])
       const messages = await tx('messages', 'readonly', (s) => req(s.messages.getAll()))
-      return { version: 1, exported_at: now(), conversations, messages, memories, usage, settings: JSON.parse(localStorage.getItem('nova_settings') || '{}') }
+      return { version: 1, exported_at: now(), conversations, messages, memories, usage, settings: JSON.parse(localStorage.getItem('nova_settings_v4') || '{}') }
     },
     async importAll(data, { merge = true } = {}) {
       if (!data || data.version !== 1) throw new Error('ملف نسخة احتياطية غير صالح')
@@ -97,7 +97,7 @@ window.N = window.N || {}
         for (const m of data.memories || []) if (!existing.includes(m.fact)) await req(s.memories.add({ fact: m.fact, created_at: m.created_at || now() }))
         if (data.usage) await req(s.kv.put({ key: 'usage', value: data.usage }))
       })
-      if (data.settings && Object.keys(data.settings).length) localStorage.setItem('nova_settings', JSON.stringify(data.settings))
+      if (data.settings && Object.keys(data.settings).length) localStorage.setItem('nova_settings_v4', JSON.stringify(data.settings))
     },
     async wipe() { await tx(['conversations', 'messages', 'memories', 'kv'], 'readwrite', async (s) => { for (const k of ['conversations', 'messages', 'memories', 'kv']) await req(s[k].clear()) }) },
   }
