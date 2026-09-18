@@ -8,6 +8,7 @@ import { chatStream, chatOnce, consumeSSE, estimateTokens, looksLikeProviderErro
 import { MODELS, DEFAULT_MODEL, ALLOWED_MODELS, SYSTEM_PROMPT } from './personas'
 import { PROVIDERS, discoverModels, detectProvider, pickCheapModel } from './providers'
 import { page } from './page'
+import { webSearch, fetchPage, TOOLS_PROMPT, parseToolCall } from './search'
 
 type Bindings = { OPENAI_API_KEY?: string; OPENAI_BASE_URL?: string }
 const app = new Hono<{ Bindings: Bindings }>()
@@ -48,15 +49,22 @@ app.post('/api/models', async (c) => {
   }
 })
 
+// ---------- Web search (used by the model; also exposed for the UI) ----------
+app.get('/api/search', async (c) => {
+  const q = c.req.query('q') || ''
+  try { return c.json({ results: await webSearch(q, 8) }) } catch (e: any) { return c.json({ error: e?.message }, 502) }
+})
+
 // ---------- Chat (streaming relay) ----------
 const MAX_CONTEXT_TOKENS = 60000
 const MAX_AUTO_CONTINUES = 3
 
 type InMsg = { role: 'user' | 'assistant'; content: string }
 
-function buildContext(memories: string[], history: InMsg[], os?: string): ChatMessage[] {
+function buildContext(instructions: string, history: InMsg[], os?: string, webEnabled = true): ChatMessage[] {
   let sys = SYSTEM_PROMPT
-  if (memories.length) sys += `\n\n# Known facts about the user\n` + memories.map((m) => `- ${m}`).join('\n')
+  if (webEnabled) sys += `\n${TOOLS_PROMPT}`
+  if (instructions.trim()) sys += `\n\n# User's standing instructions\n${instructions.trim().slice(0, 8000)}`
   if (os) sys += `\n\nUser's device/OS (from browser): ${os}. Give commands for this OS unless the user says otherwise.`
   sys += `\n\nCurrent date: ${new Date().toISOString().slice(0, 10)}`
   const out: ChatMessage[] = []
@@ -86,10 +94,10 @@ app.post('/api/chat', async (c) => {
   const history: InMsg[] = Array.isArray(body.messages)
     ? body.messages.filter((m: any) => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string').slice(-200)
     : []
-  const memories: string[] = Array.isArray(body.memories) ? body.memories.filter((m: any) => typeof m === 'string').slice(0, 60) : []
+  const instructions: string = typeof body.instructions === 'string' ? body.instructions : ''
+  const webEnabled: boolean = body.web !== false
   const os: string | undefined = typeof body.os === 'string' ? body.os.slice(0, 40) : undefined
   const wantTitle = !!body.want_title
-  const wantFacts = !!body.want_facts
   if (!history.length || history[history.length - 1].role !== 'user') return c.json({ error: 'messages must end with a user message' }, 400)
   const total = history.reduce((n, m) => n + m.content.length, 0)
   if (total > 800000) return c.json({ error: 'conversation too long' }, 400)
@@ -105,20 +113,58 @@ app.post('/api/chat', async (c) => {
     await stream.writeSSE({ event: 'meta', data: JSON.stringify({ model }) })
     let full = ''
     try {
-      let messages = buildContext(memories, history, os)
-      for (let pass = 0; pass <= MAX_AUTO_CONTINUES; pass++) {
-        const res = await chatStream(llm.env, model, messages)
-        const { text, finish } = await consumeSSE(res.body!, async (delta) => {
-          await stream.writeSSE({ event: 'delta', data: JSON.stringify({ t: delta }) })
-        })
-        full += text
-        if (finish !== 'length' || !text) break
-        await stream.writeSSE({ event: 'status', data: JSON.stringify({ s: 'continuing', pass: pass + 1 }) })
-        messages = [
-          ...buildContext(memories, history, os),
-          { role: 'assistant', content: full },
-          { role: 'user', content: 'Your previous message was cut off by the output limit. Continue EXACTLY from where you stopped — do not repeat anything, do not add an intro. If you were inside a code block, continue the code directly (the block is still open).' },
-        ]
+      const base = buildContext(instructions, history, os, webEnabled)
+      let messages: ChatMessage[] = [...base]
+      const toolLog: string[] = []
+      let toolCalls = 0
+      // Outer loop: tool calls (search/fetch). Inner: auto-continue on output-limit cutoff.
+      outer: while (true) {
+        let text = ''
+        let finish = ''
+        let buffered = '' // hold back the very start of a reply so a tool call never leaks to the UI
+        let decided = false
+        for (let pass = 0; pass <= MAX_AUTO_CONTINUES; pass++) {
+          const res = await chatStream(llm.env, model, pass === 0 ? messages : [...messages, { role: 'assistant', content: text }, { role: 'user', content: 'Your previous message was cut off by the output limit. Continue EXACTLY from where you stopped — do not repeat anything, do not add an intro. If you were inside a code block, continue the code directly (the block is still open).' }])
+          const r = await consumeSSE(res.body!, async (delta) => {
+            if (!decided) {
+              buffered += delta
+              if (buffered.trimStart().startsWith('<<TOOL>>') || (buffered.trim().length < 8 && '<<TOOL>>'.startsWith(buffered.trim()))) return // possible tool call: keep buffering
+              decided = true
+              await stream.writeSSE({ event: 'delta', data: JSON.stringify({ t: buffered }) })
+              buffered = ''
+              return
+            }
+            await stream.writeSSE({ event: 'delta', data: JSON.stringify({ t: delta }) })
+          })
+          text += r.text
+          finish = r.finish
+          if (finish !== 'length' || !r.text) break
+          if (decided) await stream.writeSSE({ event: 'status', data: JSON.stringify({ s: 'continuing', pass: pass + 1 }) })
+        }
+        const call = webEnabled && toolCalls < 4 ? parseToolCall(text) : null
+        if (call) {
+          toolCalls++
+          let result = ''
+          try {
+            if (call.tool === 'search') {
+              await stream.writeSSE({ event: 'status', data: JSON.stringify({ s: 'search', q: call.query }) })
+              const rs = await webSearch(call.query, 6)
+              result = rs.length ? rs.map((x, i) => `${i + 1}. ${x.title}\n   ${x.url}\n   ${x.snippet}`).join('\n') : 'No results.'
+              toolLog.push(`🔍 ${call.query}`)
+            } else {
+              await stream.writeSSE({ event: 'status', data: JSON.stringify({ s: 'fetch', url: call.url }) })
+              result = await fetchPage(call.url)
+              toolLog.push(`📄 ${call.url}`)
+            }
+          } catch (e: any) { result = `Tool error: ${e?.message || e}` }
+          messages = [...messages, { role: 'assistant', content: text }, { role: 'user', content: `TOOL RESULT for ${call.tool}:\n${result}\n\nNow continue answering the user's request. Call another tool only if still necessary.` }]
+          continue outer
+        }
+        // not a tool call: flush anything still buffered
+        if (!decided && buffered) await stream.writeSSE({ event: 'delta', data: JSON.stringify({ t: buffered }) })
+        full = text
+        if (toolLog.length) await stream.writeSSE({ event: 'tools', data: JSON.stringify({ log: toolLog }) })
+        break
       }
     } catch (err: any) {
       await stream.writeSSE({ event: 'error', data: JSON.stringify({ code: err?.code ?? 'upstream', message: err?.message ?? 'LLM failed', partial: !!full }) })
@@ -129,7 +175,6 @@ app.post('/api/chat', async (c) => {
 
     // Optional extras (cheap model). Failures are ignored — the answer is already delivered.
     let title: string | undefined
-    let facts: string[] = []
     if (wantTitle) {
       try {
         const t = await chatOnce(llm.env, cheapModel, [
@@ -139,17 +184,7 @@ app.post('/api/chat', async (c) => {
         title = t.trim().split('\n')[0].replace(/^["'«»#*\s]+|["'«»*\s]+$/g, '').slice(0, 80) || undefined
       } catch {}
     }
-    if (wantFacts && userText.length > 15) {
-      try {
-        const raw = await chatOnce(llm.env, cheapModel, [
-          { role: 'system', content: `Extract durable facts about the USER that would help in future coding sessions: name, OS, skill level, preferred stack/languages, project names & what they're building, tools/hosting/DB they use, accounts they own (never secrets), language preference. Ignore one-off questions and code content. Return ONLY a JSON array of short strings in the user's language, max 3 items. If nothing durable, return [].` },
-          { role: 'user', content: userText.slice(0, 4000) },
-        ])
-        const match = raw.match(/\[[\s\S]*\]/)
-        if (match) { const arr = JSON.parse(match[0]); if (Array.isArray(arr)) facts = arr.filter((f) => typeof f === 'string' && f.trim().length > 3).slice(0, 3).map((f) => f.trim().slice(0, 300)) }
-      } catch {}
-    }
-    await stream.writeSSE({ event: 'done', data: JSON.stringify({ title, facts, tokens: estimateTokens(full) }) })
+    await stream.writeSSE({ event: 'done', data: JSON.stringify({ title, tokens: estimateTokens(full) }) })
   })
 })
 
