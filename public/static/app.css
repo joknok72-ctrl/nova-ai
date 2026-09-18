@@ -216,3 +216,6 @@ html[dir="ltr"] .net-badge { transform: translateX(-50%); }
   #file-tree .ft-dir { display: none; }
   #file-tree { max-height: 44px; }
 }
+
+/* Tailwind .hidden must always win over component display rules */
+.hidden { display: none !important; }
