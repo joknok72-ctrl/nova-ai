@@ -149,5 +149,6 @@ export const page = () => `<!DOCTYPE html>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="/static/app.js"></script>
+<script src="/static/app2.js"></script>
 </body>
 </html>`

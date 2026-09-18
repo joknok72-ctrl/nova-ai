@@ -1,5 +1,7 @@
-/* NOVA CODE frontend v2 — vanilla JS */
-(() => {
+/* NOVA CODE frontend v2 — vanilla JS (part 1: core) */
+window.N = window.N || {}
+;(() => {
+  const N = window.N
   const $ = (s) => document.querySelector(s)
   const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html !== undefined) e.innerHTML = html; return e }
   const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
@@ -145,7 +147,7 @@
       }
     }
     if (!scroll.children.length) scroll.appendChild(el('p', 'text-xs text-slate-500 text-center py-4', 'لا نتائج'))
-    head.querySelector('#mm-refresh').onclick = (e) => { e.stopPropagation(); closeMenus(); if (usingByok()) refreshModels(true); else openSettings() }
+    head.querySelector('#mm-refresh').onclick = (e) => { e.stopPropagation(); closeMenus(); if (usingByok()) refreshModels(true); else N.openSettings() }
   }
   const closeMenus = () => document.querySelectorAll('.menu').forEach((m) => m.classList.add('hidden'))
   $('#model-btn').onclick = (e) => { e.stopPropagation(); const m = $('#model-menu'); const h = m.classList.contains('hidden'); closeMenus(); if (h) { buildModelMenu(); m.classList.remove('hidden') } }
@@ -183,9 +185,9 @@
     for (const [icon, title, prompt] of SUGGESTIONS) {
       const b = el('button', 'suggestion')
       b.innerHTML = `<i class="fas ${icon}"></i><div class="s-title">${title}</div><div class="s-desc">${esc(prompt)}</div>`
-      b.onclick = () => { input.value = prompt; autoGrow(); input.focus(); if (!/الصق/.test(prompt)) send() }
+      b.onclick = () => { N.input.value = prompt; N.autoGrow(); N.input.focus(); if (!/الصق/.test(prompt)) N.send() }
       box.appendChild(b)
     }
   }
-  //__PART2__
+  Object.assign(N, { $, el, esc, state, settings, saveSettings, usingByok, byokHeaders, detectOS, md, toast, api, openSidebar, renderConversations, refreshConversations, deleteConversation, currentModels, setModelUI, setModel, buildModelMenu, closeMenus, refreshModels, updateKeyStatus, renderSuggestions })
 })()
