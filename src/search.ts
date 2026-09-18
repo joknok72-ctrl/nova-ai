@@ -11,13 +11,9 @@ function decode(s: string) {
     .trim()
 }
 
-export async function webSearch(query: string, max = 6): Promise<SearchResult[]> {
-  const q = query.trim().slice(0, 300)
-  if (!q) return []
-  const res = await fetch('https://html.duckduckgo.com/html/?q=' + encodeURIComponent(q), {
-    headers: { 'User-Agent': UA, Accept: 'text/html', 'Accept-Language': 'en-US,en;q=0.9,ar;q=0.8' },
-  })
-  if (!res.ok) throw new Error(`search ${res.status}`)
+async function ddg(q: string, max: number): Promise<SearchResult[]> {
+  const res = await fetch('https://html.duckduckgo.com/html/?q=' + encodeURIComponent(q), { headers: { 'User-Agent': UA, Accept: 'text/html', 'Accept-Language': 'en-US,en;q=0.9,ar;q=0.8' } })
+  if (!res.ok) return []
   const html = await res.text()
   const out: SearchResult[] = []
   const re = /<a[^>]+class="result__a"[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>[\s\S]*?<a[^>]+class="result__snippet"[^>]*>([\s\S]*?)<\/a>/g
@@ -31,6 +27,56 @@ export async function webSearch(query: string, max = 6): Promise<SearchResult[]>
     out.push({ title: decode(m[2]), url, snippet: decode(m[3]) })
   }
   return out
+}
+
+async function bing(q: string, max: number): Promise<SearchResult[]> {
+  const res = await fetch('https://www.bing.com/search?q=' + encodeURIComponent(q) + '&setlang=en&count=10&form=QBLH', { headers: { 'User-Agent': UA, Accept: 'text/html', 'Accept-Language': 'en-US,en;q=0.9', Cookie: 'SRCHHPGUSR=ADLT=OFF' } })
+  if (!res.ok) return []
+  const html = await res.text()
+  const out: SearchResult[] = []
+  // split per result block; tolerant to layout changes
+  const blocks = html.split('<li class="b_algo"').slice(1)
+  for (const b of blocks) {
+    if (out.length >= max) break
+    const a = b.match(/<h2[^>]*>\s*<a[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/)
+    if (!a) continue
+    let url = a[1].replace(/&amp;/g, '&')
+    // Bing wraps in a redirect: /ck/a?...&u=a1<base64url>
+    const u = url.match(/[?&]u=a1([^&]+)/)
+    if (u) { try { url = atob(u[1].replace(/-/g, '+').replace(/_/g, '/')) } catch {} }
+    if (!/^https?:/.test(url) || /bing\.com|go\.microsoft\.com/.test(url)) continue
+    const p = b.match(/<p[^>]*>([\s\S]*?)<\/p>/) || b.match(/class="b_lineclamp[^"]*"[^>]*>([\s\S]*?)<\/(?:p|div)>/)
+    out.push({ title: decode(a[2]), url, snippet: decode(p ? p[1] : '').replace(/^Web\s*/i, '') })
+  }
+  return out
+}
+
+async function brave(q: string, max: number): Promise<SearchResult[]> {
+  const res = await fetch('https://search.brave.com/search?q=' + encodeURIComponent(q) + '&source=web', { headers: { 'User-Agent': UA, Accept: 'text/html', 'Accept-Language': 'en-US,en;q=0.9' } })
+  if (!res.ok) return []
+  const html = await res.text()
+  const out: SearchResult[] = []
+  const re = /<a[^>]+href="(https?:\/\/[^"]+)"[^>]*class="[^"]*\bh\b[^"]*"[^>]*>[\s\S]*?<div[^>]*class="[^"]*title[^"]*"[^>]*>([\s\S]*?)<\/div>[\s\S]*?<div[^>]*class="[^"]*snippet-description[^"]*"[^>]*>([\s\S]*?)<\/div>/g
+  let m
+  while ((m = re.exec(html)) && out.length < max) {
+    if (/brave\.com/.test(m[1])) continue
+    out.push({ title: decode(m[2]), url: m[1], snippet: decode(m[3]) })
+  }
+  return out
+}
+
+/** Try several engines (datacenter IPs get blocked by some). First non-empty wins. */
+export async function webSearch(query: string, max = 6): Promise<SearchResult[]> {
+  const q = query.trim().slice(0, 300)
+  if (!q) return []
+  const engines = [bing, ddg, brave]
+  for (const e of engines) {
+    try { const r = await e(q, max); if (r.length) return r } catch {}
+  }
+  // last resort: run all in parallel once more
+  const all = await Promise.allSettled(engines.map((e) => e(q, max)))
+  for (const r of all) if (r.status === 'fulfilled' && r.value.length) return r.value
+  return []
 }
 
 /** Fetch a page and return readable text (scripts/styles stripped), capped. */
