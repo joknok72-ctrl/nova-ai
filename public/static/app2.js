@@ -214,8 +214,8 @@
     const msgs = await N.store.listMessages(convId)
     const isFirst = msgs.filter((m) => m.role === 'user').length === 1
     try {
-      const res = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json', ...byokHeaders() }, signal: state.abort.signal,
-        body: JSON.stringify({ messages: msgs.map((m) => ({ role: m.role, content: m.content, images: m.images })), instructions: settings.instructions || '', web: settings.web !== false, model: state.model, os: detectOS(), want_title: isFirst && !payload.regenerate }) })
+      const res = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json', ...byokHeaders(), 'x-nova-provider': state.providerId || 'server' }, signal: state.abort.signal,
+        body: JSON.stringify({ messages: msgs.map((m) => ({ role: m.role, content: m.content, images: m.images })), instructions: settings.instructions || '', web: settings.web !== false, deep: !!settings.deep, fallbacks: N.fallbacks ? N.fallbacks() : [], model: state.model, os: detectOS(), want_title: isFirst && !payload.regenerate }) })
       if (!res.ok) { const j = await res.json().catch(() => ({})); const e = new Error(j.message || j.error || 'request failed'); e.code = j.error; throw e }
       const reader = res.body.getReader(), dec = new TextDecoder(); let buf = ''
       while (true) {
@@ -229,6 +229,8 @@
           const j = JSON.parse(data)
           if (type === 'meta') { /* stateless server */ }
           else if (type === 'delta') { full += j.t; schedule() }
+          else if (type === 'status' && j.s === 'failover') { const pn = provInfo(j.provider).name; toast(`⚡ تحويل تلقائي إلى ${pn} (${j.model})`, 4000); bubble.querySelector('.meta .mono').textContent = j.model; $('#status-line').textContent = `تم التحويل إلى ${pn}…` }
+          else if (type === 'status' && j.s === 'deep') { const names = { plan: '📋 يخطّط…', build: '🏗️ يبني المشروع…', review: '🔍 يراجع كوده بنفسه…' }; $('#status-line').textContent = names[j.step] || ''; if (j.step === 'review') { const chip = el('div', 'status-chip deep-chip', names.review); contentEl.appendChild(chip) } }
           else if (type === 'status') { $('#status-line').textContent = j.s === 'search' ? `🔍 يبحث على النت: ${j.q}` : j.s === 'fetch' ? `📄 يقرأ: ${j.url.slice(0, 60)}` : `الرد طويل — يكمل تلقائياً (جزء ${j.pass + 1})…`; if (j.s === 'search' || j.s === 'fetch') { contentEl.innerHTML = `<div class="thinking"><span></span><span></span><span></span></div><div class="status-chip"><i class="fas ${j.s === 'search' ? 'fa-magnifying-glass' : 'fa-file-lines'}"></i> ${esc(j.s === 'search' ? j.q : j.url.slice(0, 60))}</div>` } }
           else if (type === 'tools') { toolLog = j.log }
           else if (type === 'error') { const e = new Error(j.message); e.code = j.code; throw e }
@@ -236,6 +238,7 @@
         }
       }
       contentEl.innerHTML = md(full); bubble.dataset.raw = full
+      if (doneInfo?.model) bubble.querySelector('.meta .mono').textContent = doneInfo.model
       // persist locally
       await N.store.addMessage(convId, 'assistant', full, doneInfo?.tokens || 0)
       await N.store.bumpUsage((doneInfo?.tokens || 0))

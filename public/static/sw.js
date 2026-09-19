@@ -3,7 +3,7 @@
    - App shell + all static assets: cache-first (served from disk, zero network).
    - /api/*: network-only (this is the ONLY thing that touches the internet — a few KB per message).
    - Background refresh of the shell so updates arrive silently. */
-const VERSION = 'nova-v7'
+const VERSION = 'nova-v8'
 const SHELL = [
   '/',
   '/static/app.css',
@@ -11,6 +11,7 @@ const SHELL = [
   '/static/app.js',
   '/static/app2.js',
   '/static/app3.js',
+  '/static/app4.js',
   '/static/manifest.json',
   '/static/icon.svg',
   '/static/vendor/tw.css',

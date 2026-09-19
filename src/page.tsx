@@ -48,6 +48,7 @@ export const page = () => `<!DOCTYPE html>
         <div id="model-menu" class="menu hidden"></div>
       </div>
       <button id="btn-web" class="icon-btn web-btn" title="البحث على النت"><i class="fas fa-globe"></i></button>
+      <button id="btn-deep" class="icon-btn deep-btn" title="الوضع العميق"><i class="fas fa-brain"></i></button>
       <div class="flex-1"></div>
       <button id="btn-files" class="chip hidden !px-2.5"><i class="fas fa-folder-tree text-amber-400"></i><span class="hidden sm:inline">الملفات</span><span id="files-count" class="badge">0</span></button>
       <button id="btn-share" class="icon-btn hidden" title="مشاركة المشروع برابط"><i class="fas fa-share-nodes"></i></button>
@@ -69,7 +70,7 @@ export const page = () => `<!DOCTYPE html>
             <div class="feature"><i class="fas fa-file-code"></i>ملفات كاملة</div>
             <div class="feature"><i class="fas fa-camera"></i>صورة → كود</div>
             <div class="feature"><i class="fas fa-eye"></i>معاينة حية</div>
-            <div class="feature"><i class="fas fa-play"></i>تشغيل Python/JS</div>
+            <div class="feature"><i class="fas fa-brain"></i>يراجع كوده بنفسه</div>
           </div>
         </div>
         <div id="message-list" class="max-w-3xl mx-auto px-3 sm:px-4 py-4 sm:py-6 space-y-5 hidden"></div>
@@ -139,6 +140,7 @@ export const page = () => `<!DOCTYPE html>
 <script src="/static/app.js"></script>
 <script src="/static/app2.js"></script>
 <script src="/static/app3.js"></script>
+<script src="/static/app4.js"></script>
 <script>if("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(()=>{})</script>
 </body>
 </html>`
