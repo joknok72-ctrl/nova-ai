@@ -3,13 +3,14 @@
    - App shell + all static assets: cache-first (served from disk, zero network).
    - /api/*: network-only (this is the ONLY thing that touches the internet — a few KB per message).
    - Background refresh of the shell so updates arrive silently. */
-const VERSION = 'nova-v6'
+const VERSION = 'nova-v7'
 const SHELL = [
   '/',
   '/static/app.css',
   '/static/store.js',
   '/static/app.js',
   '/static/app2.js',
+  '/static/app3.js',
   '/static/manifest.json',
   '/static/icon.svg',
   '/static/vendor/tw.css',
@@ -46,7 +47,12 @@ self.addEventListener('activate', (e) => {
 
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url)
-  if (url.origin !== location.origin) return // never touch third-party (there is none)
+  // Pyodide (Python runtime) is the only third-party asset: cache it forever after first download so it works offline afterwards
+  if (url.hostname === 'cdn.jsdelivr.net' && url.pathname.includes('/pyodide/')) {
+    e.respondWith(caches.open('nova-pyodide').then(async (c) => (await c.match(e.request)) || fetch(e.request).then((r) => { if (r.ok) c.put(e.request, r.clone()); return r })))
+    return
+  }
+  if (url.origin !== location.origin) return
   if (url.pathname.startsWith('/api/') || url.pathname === '/sw.js' || url.pathname === '/static/sw.js') return // network-only, streaming
 
   if (e.request.method !== 'GET') return

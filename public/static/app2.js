@@ -34,8 +34,8 @@
   const guessFilename = (code) => { const lang = code.dataset.lang || 'txt'; const map = { javascript: 'js', typescript: 'ts', python: 'py', html: 'html', css: 'css', json: 'json', bash: 'sh', shell: 'sh', sql: 'sql', yaml: 'yml', markdown: 'md', dockerfile: 'Dockerfile', tsx: 'tsx', jsx: 'jsx' }; return 'file.' + (map[lang] || lang || 'txt') }
   const downloadText = (name, text) => { const a = el('a'); a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain' })); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000) }
 
-  function showChat() { welcome.classList.add('hidden'); msgList.classList.remove('hidden'); ['#btn-rename', '#btn-export', '#btn-delete'].forEach((s) => $(s).classList.remove('hidden')); updateFilesButton() }
-  function showWelcome() { welcome.classList.remove('hidden'); msgList.classList.add('hidden'); msgList.innerHTML = ''; ['#btn-rename', '#btn-export', '#btn-delete', '#btn-files'].forEach((s) => $(s).classList.add('hidden')); closeFiles() }
+  function showChat() { welcome.classList.add('hidden'); msgList.classList.remove('hidden'); ['#btn-rename', '#btn-export', '#btn-delete', '#btn-share'].forEach((s) => $(s).classList.remove('hidden')); updateFilesButton() }
+  function showWelcome() { welcome.classList.remove('hidden'); msgList.classList.add('hidden'); msgList.innerHTML = ''; ['#btn-rename', '#btn-export', '#btn-delete', '#btn-files', '#btn-share'].forEach((s) => $(s).classList.add('hidden')); closeFiles() }
 
   async function loadConversation(id) {
     if (state.streaming) stopStream()
@@ -44,7 +44,7 @@
     state.current = conv
     if (conv.model && findModel(conv.provider ?? state.providerId, conv.model)) { state.providerId = conv.provider ?? state.providerId; state.model = conv.model; setModelUI() }
     msgList.innerHTML = ''; state.files = {}
-    for (const m of conv.messages) { addMessage(m.role, m.content); if (m.role === 'assistant') extractFiles(m.content) }
+    for (const m of conv.messages) { N.addMessage(m.role, m.content, { images: m.images }); if (m.role === 'assistant') extractFiles(m.content) }
     showChat(); scrollBottom(true); renderConversations(); updateFilesButton()
     history.replaceState(null, '', `#${id}`)
   }
@@ -169,25 +169,27 @@
   // ---------- Streaming ----------
   const input = $('#composer-input'), btnSend = $('#btn-send'), btnStop = $('#btn-stop')
   const DEFAULT_STATUS = 'Enter للإرسال · Shift+Enter لسطر جديد · لو توقف الرد اكتب «كمّل»'
-  function autoGrow() { input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 220) + 'px'; btnSend.disabled = (!input.value.trim() && !state.attachments.length) || state.streaming }
+  function autoGrow() { input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 220) + 'px'; btnSend.disabled = (!input.value.trim() && !state.attachments.length && !(state.images?.length)) || state.streaming }
   input.oninput = autoGrow
-  input.onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); send() } }
-  btnSend.onclick = send; btnStop.onclick = () => stopStream(); autoGrow()
+  input.onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); N.send() } }
+  btnSend.onclick = () => N.send(); btnStop.onclick = () => stopStream(); autoGrow()
   function setStreaming(on) { state.streaming = on; btnStop.classList.toggle('hidden', !on); btnSend.classList.toggle('hidden', on); autoGrow() }
   function stopStream() { state.abort?.abort(); state.abort = null; setStreaming(false) }
 
   async function send() {
     const content = input.value.trim()
-    if ((!content && !state.attachments.length) || state.streaming) return
+    if ((!content && !state.attachments.length && !(state.images?.length)) || state.streaming) return
     if (!navigator.onLine) return toast('لا يوجد إنترنت — إرسال الرسالة للنموذج يحتاج اتصالاً بسيطاً (بضع كيلوبايت)', 3500)
     if (!usingByok() && !state.meta.server_key_configured) return openSettings()
     const attachments = state.attachments; state.attachments = []; renderAttachments()
+    N.pendingImages = (state.images || []).splice(0); N.renderImages?.()
     input.value = ''; autoGrow()
-    let text = content
+    let text = content || (N.pendingImages?.length ? 'انظر الصورة المرفقة.' : '')
     if (attachments.length) text = (content || 'Here are my files:') + attachments.map((a) => `\n\n### 📎 ${a.name}\n\`\`\`${(a.name.split('.').pop() || '').slice(0, 12)}\n${a.content}\n\`\`\``).join('')
     if (!state.current) { state.current = await N.store.createConversation(state.model, state.providerId); history.replaceState(null, '', `#${state.current.id}`); refreshConversations() }
+    const imgs = (N.pendingImages || []).map((im) => ({ dataUrl: im.dataUrl }))
     const id = await N.store.addMessage(state.current.id, 'user', text)
-    addMessage('user', text)
+    N.addMessage('user', text, { images: imgs })
     await streamRequest({ userMsgId: id })
   }
   async function regenerate() {
@@ -213,7 +215,7 @@
     const isFirst = msgs.filter((m) => m.role === 'user').length === 1
     try {
       const res = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json', ...byokHeaders() }, signal: state.abort.signal,
-        body: JSON.stringify({ messages: msgs.map((m) => ({ role: m.role, content: m.content })), instructions: settings.instructions || '', web: settings.web !== false, model: state.model, os: detectOS(), want_title: isFirst && !payload.regenerate }) })
+        body: JSON.stringify({ messages: msgs.map((m) => ({ role: m.role, content: m.content, images: m.images })), instructions: settings.instructions || '', web: settings.web !== false, model: state.model, os: detectOS(), want_title: isFirst && !payload.regenerate }) })
       if (!res.ok) { const j = await res.json().catch(() => ({})); const e = new Error(j.message || j.error || 'request failed'); e.code = j.error; throw e }
       const reader = res.body.getReader(), dec = new TextDecoder(); let buf = ''
       while (true) {
@@ -380,7 +382,7 @@
     openModal('⚡ عن NOVA CODE', box)
   }
 
-  Object.assign(N, { input, autoGrow, send, openSettings, openInstructions, loadConversation, newChat, openModal, closeModal, downloadText })
+  Object.assign(N, { input, autoGrow, send, openSettings, openInstructions, loadConversation, newChat, openModal, closeModal, downloadText, addMessage, renderFileTree })
 
   // ---------- Offline awareness ----------
   const netBadge = $('#net-badge')

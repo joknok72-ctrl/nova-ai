@@ -219,3 +219,17 @@ html[dir="ltr"] .net-badge { transform: translateX(-50%); }
 
 /* Tailwind .hidden must always win over component display rules */
 .hidden { display: none !important; }
+
+/* ===== v5 ===== */
+.img-chip { position: relative; width: 56px; height: 56px; border-radius: 10px; overflow: hidden; border: 1px solid rgba(255,255,255,.1); }
+.img-chip img { width: 100%; height: 100%; object-fit: cover; }
+.img-chip button { position: absolute; top: 2px; inset-inline-end: 2px; width: 18px; height: 18px; border-radius: 50%; background: rgba(0,0,0,.7); color: #fff; font-size: 10px; display: grid; place-items: center; }
+.msg-imgs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.msg-imgs img { max-width: 220px; max-height: 220px; border-radius: 12px; border: 1px solid rgba(255,255,255,.1); cursor: zoom-in; }
+.cb-run { color: #34d399 !important; font-weight: 700; }
+.run-out { direction: ltr; text-align: left; background: #05070b; color: #cbd5e1; font-family: 'JetBrains Mono', monospace; font-size: .76rem; padding: .6rem .8rem; margin: 0; border-top: 1px solid rgba(255,255,255,.08); max-height: 260px; overflow: auto; white-space: pre-wrap; word-break: break-word; }
+.run-out:empty::before { content: '…'; color: #64748b; }
+.file-editor { flex: 1; width: 100%; min-height: 200px; background: #0d1117; color: #e2e8f0; font-family: 'JetBrains Mono', monospace; font-size: .8rem; line-height: 1.6; padding: .75rem; border: none; outline: none; resize: none; direction: ltr; text-align: left; tab-size: 2; }
+.mic-btn.listening { color: #f87171; animation: pulse 1s infinite; }
+@keyframes pulse { 0%,100% { transform: scale(1) } 50% { transform: scale(1.15) } }
+@media (max-width: 640px) { .msg-imgs img { max-width: 100%; } .composer .icon-btn { width: 36px; height: 36px; } }

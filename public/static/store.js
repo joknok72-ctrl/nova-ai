@@ -53,9 +53,11 @@ window.N = window.N || {}
       const m = await tx('messages', 'readonly', (s) => req(s.messages.index('conv').getAll(convId)))
       return m.sort((a, b) => a.id - b.id)
     },
-    addMessage(convId, role, content, tokens = 0) {
+    addMessage(convId, role, content, tokens = 0) { return this._addMessageWithImages(convId, role, content, tokens) },
+    _addMessageWithImages(convId, role, content, tokens = 0, images, silent) {
       return tx(['messages', 'conversations'], 'readwrite', async (s) => {
-        const id = await req(s.messages.add({ conversation_id: convId, role, content, tokens, created_at: now() }))
+        const rec = { conversation_id: convId, role, content, tokens, created_at: now() }; if (images?.length) rec.images = images
+        const id = await req(s.messages.add(rec))
         const c = await req(s.conversations.get(convId)); if (c) { c.updated_at = now(); await req(s.conversations.put(c)) }
         return id
       })

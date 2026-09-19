@@ -50,6 +50,7 @@ export const page = () => `<!DOCTYPE html>
       <button id="btn-web" class="icon-btn web-btn" title="البحث على النت"><i class="fas fa-globe"></i></button>
       <div class="flex-1"></div>
       <button id="btn-files" class="chip hidden !px-2.5"><i class="fas fa-folder-tree text-amber-400"></i><span class="hidden sm:inline">الملفات</span><span id="files-count" class="badge">0</span></button>
+      <button id="btn-share" class="icon-btn hidden" title="مشاركة المشروع برابط"><i class="fas fa-share-nodes"></i></button>
       <button id="btn-rename" class="icon-btn hidden" title="إعادة تسمية"><i class="fas fa-pen"></i></button>
       <button id="btn-export" class="icon-btn hidden hidden-xs" title="تصدير المحادثة"><i class="fas fa-file-export"></i></button>
       <button id="btn-delete" class="icon-btn hidden hover:text-red-400" title="حذف"><i class="fas fa-trash"></i></button>
@@ -66,9 +67,9 @@ export const page = () => `<!DOCTYPE html>
           <div id="suggestions" class="grid sm:grid-cols-2 gap-2.5"></div>
           <div class="mt-5 grid grid-cols-4 gap-1.5 text-center text-[10px] sm:text-[11px] text-slate-500">
             <div class="feature"><i class="fas fa-file-code"></i>ملفات كاملة</div>
-            <div class="feature"><i class="fas fa-globe"></i>يبحث بنفسه</div>
+            <div class="feature"><i class="fas fa-camera"></i>صورة → كود</div>
             <div class="feature"><i class="fas fa-eye"></i>معاينة حية</div>
-            <div class="feature"><i class="fas fa-wifi-slash"></i>يعمل أوفلاين</div>
+            <div class="feature"><i class="fas fa-play"></i>تشغيل Python/JS</div>
           </div>
         </div>
         <div id="message-list" class="max-w-3xl mx-auto px-3 sm:px-4 py-4 sm:py-6 space-y-5 hidden"></div>
@@ -104,9 +105,12 @@ export const page = () => `<!DOCTYPE html>
         <div id="attachments" class="flex flex-wrap gap-1.5 mb-2 empty:hidden"></div>
         <div class="composer">
           <button id="btn-attach" class="icon-btn !w-10 !h-10 mb-0.5 shrink-0" title="إرفاق ملفات كود"><i class="fas fa-paperclip"></i></button>
+          <button id="btn-image" class="icon-btn !w-10 !h-10 mb-0.5 shrink-0" title="صورة / لقطة شاشة / كاميرا"><i class="fas fa-camera"></i></button>
+          <input id="image-input" type="file" multiple accept="image/*" class="hidden">
           <input id="file-input" type="file" multiple class="hidden" accept=".js,.ts,.tsx,.jsx,.py,.html,.css,.json,.md,.txt,.sql,.yaml,.yml,.toml,.env,.sh,.go,.rs,.java,.kt,.swift,.dart,.php,.rb,.c,.cpp,.h,.cs,.vue,.svelte,.xml,.csv,.log,.ini,.cfg,Dockerfile">
           <textarea id="composer-input" rows="1" placeholder="اعمل لي موقع لمطعم… أو الصق كود/خطأ" enterkeyhint="send"></textarea>
           <div class="flex items-center gap-1.5 pb-0.5 pe-0.5 shrink-0">
+            <button id="btn-mic" class="icon-btn !w-10 !h-10 mic-btn" title="إدخال صوتي"><i class="fas fa-microphone"></i></button>
             <button id="btn-stop" class="send-btn bg-red-500 hover:bg-red-600 hidden" title="إيقاف"><i class="fas fa-stop"></i></button>
             <button id="btn-send" class="send-btn" title="إرسال"><i class="fas fa-arrow-up"></i></button>
           </div>
@@ -134,6 +138,7 @@ export const page = () => `<!DOCTYPE html>
 <script src="/static/store.js"></script>
 <script src="/static/app.js"></script>
 <script src="/static/app2.js"></script>
+<script src="/static/app3.js"></script>
 <script>if("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(()=>{})</script>
 </body>
 </html>`

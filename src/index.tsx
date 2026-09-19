@@ -59,11 +59,12 @@ app.get('/api/search', async (c) => {
 const MAX_CONTEXT_TOKENS = 60000
 const MAX_AUTO_CONTINUES = 3
 
-type InMsg = { role: 'user' | 'assistant'; content: string }
+type InMsg = { role: 'user' | 'assistant'; content: string; images?: { type: 'image'; dataUrl: string }[] }
 
 function buildContext(instructions: string, history: InMsg[], os?: string, webEnabled = true): ChatMessage[] {
   let sys = SYSTEM_PROMPT
   if (webEnabled) sys += `\n${TOOLS_PROMPT}`
+  sys += `\n\n# Images\nThe user may attach screenshots/photos (UI designs, error screens, whiteboard sketches, existing apps). Read them carefully: reproduce designs as pixel-faithful code, diagnose errors from screenshots, extract text/tables. If you cannot see images, say so plainly.`
   if (instructions.trim()) sys += `\n\n# User's standing instructions\n${instructions.trim().slice(0, 8000)}`
   if (os) sys += `\n\nUser's device/OS (from browser): ${os}. Give commands for this OS unless the user says otherwise.`
   sys += `\n\nCurrent date: ${new Date().toISOString().slice(0, 10)}`
@@ -74,7 +75,7 @@ function buildContext(instructions: string, history: InMsg[], os?: string, webEn
     const t = estimateTokens(m.content)
     if (budget - t < 0 && out.length > 0) break
     budget -= t
-    out.unshift({ role: m.role, content: m.content })
+    out.unshift({ role: m.role, content: m.content, images: m.images?.length ? m.images : undefined })
   }
   return [{ role: 'system', content: sys }, ...out]
 }
@@ -92,7 +93,11 @@ app.post('/api/chat', async (c) => {
   const body = await c.req.json().catch(() => ({}))
   // history: full conversation from the browser (already includes the new user message)
   const history: InMsg[] = Array.isArray(body.messages)
-    ? body.messages.filter((m: any) => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string').slice(-200)
+    ? body.messages.filter((m: any) => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string').slice(-200).map((m: any, i: number, arr: any[]) => ({
+        role: m.role, content: m.content,
+        // keep images only on the last 2 user turns (token/bandwidth budget)
+        images: Array.isArray(m.images) && i >= arr.length - 4 ? m.images.filter((x: any) => x && typeof x.dataUrl === 'string' && /^data:image\/(png|jpe?g|webp|gif);base64,/.test(x.dataUrl) && x.dataUrl.length < 6_000_000).slice(0, 4) : undefined,
+      }))
     : []
   const instructions: string = typeof body.instructions === 'string' ? body.instructions : ''
   const webEnabled: boolean = body.web !== false
@@ -100,7 +105,7 @@ app.post('/api/chat', async (c) => {
   const wantTitle = !!body.want_title
   if (!history.length || history[history.length - 1].role !== 'user') return c.json({ error: 'messages must end with a user message' }, 400)
   const total = history.reduce((n, m) => n + m.content.length, 0)
-  if (total > 800000) return c.json({ error: 'conversation too long' }, 400)
+  if (total > 1_200_000) return c.json({ error: 'conversation too long' }, 400)
 
   const llm = resolveLLM(c)
   if (!llm.env.OPENAI_API_KEY) return c.json({ error: 'no_api_key', message: 'لا يوجد مفتاح API. أضف مفتاحك من الإعدادات.' }, 400)

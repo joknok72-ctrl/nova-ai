@@ -2,7 +2,29 @@
 // Speaks OpenAI-compatible chat/completions for everyone, and Anthropic's native Messages API for Claude.
 import { detectProvider } from './providers'
 
-export type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: string }
+export type ImagePart = { type: 'image'; dataUrl: string } // data:image/png;base64,...
+export type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: string; images?: ImagePart[] }
+
+/** OpenAI-compatible content: string, or parts array when images are present */
+function toOpenAIContent(m: ChatMessage): any {
+  if (!m.images?.length) return m.content
+  return [{ type: 'text', text: m.content || 'See the attached image(s).' }, ...m.images.map((im) => ({ type: 'image_url', image_url: { url: im.dataUrl } }))]
+}
+
+/** fetch with retry on 429/5xx (exponential backoff, honors Retry-After) */
+export async function fetchRetry(url: string, init: RequestInit, tries = 3): Promise<Response> {
+  let last: Response | null = null
+  for (let i = 0; i < tries; i++) {
+    const res = await fetch(url, init)
+    if (res.status !== 429 && res.status < 500) return res
+    last = res
+    if (i < tries - 1) {
+      const ra = Number(res.headers.get('retry-after'))
+      await new Promise((r) => setTimeout(r, Math.min(8000, ra > 0 ? ra * 1000 : 800 * 2 ** i)))
+    }
+  }
+  return last!
+}
 export type LLMEnv = { OPENAI_API_KEY: string; OPENAI_BASE_URL?: string }
 
 export class LLMError extends Error {
@@ -38,7 +60,7 @@ function classify(status: number, text: string): LLMError {
 
 // Model-specific request shaping for OpenAI-compatible endpoints
 function shapeBody(model: string, messages: ChatMessage[], stream: boolean, provider: string) {
-  const body: any = { model, messages, stream }
+  const body: any = { model, messages: messages.map((m) => ({ role: m.role, content: toOpenAIContent(m) })), stream }
   const m = model.toLowerCase()
   // Newer OpenAI reasoning models reject temperature; most others accept it.
   if (!/^(o\d|gpt-5)/.test(m)) body.temperature = 0.3
@@ -51,7 +73,7 @@ function shapeBody(model: string, messages: ChatMessage[], stream: boolean, prov
 
 // ---------------- OpenAI-compatible ----------------
 async function openaiStream(env: LLMEnv, model: string, messages: ChatMessage[], provider: string): Promise<Response> {
-  const res = await fetch(`${baseUrl(env)}/chat/completions`, {
+  const res = await fetchRetry(`${baseUrl(env)}/chat/completions`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${env.OPENAI_API_KEY}`, 'HTTP-Referer': 'https://nova-code.pages.dev', 'X-Title': 'NOVA CODE' },
     body: JSON.stringify(shapeBody(model, messages, true, provider)),
@@ -61,7 +83,7 @@ async function openaiStream(env: LLMEnv, model: string, messages: ChatMessage[],
 }
 
 async function openaiOnce(env: LLMEnv, model: string, messages: ChatMessage[], provider: string): Promise<string> {
-  const res = await fetch(`${baseUrl(env)}/chat/completions`, {
+  const res = await fetchRetry(`${baseUrl(env)}/chat/completions`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${env.OPENAI_API_KEY}` },
     body: JSON.stringify(shapeBody(model, messages, false, provider)),
@@ -74,13 +96,18 @@ async function openaiOnce(env: LLMEnv, model: string, messages: ChatMessage[], p
 // ---------------- Anthropic native ----------------
 function toAnthropic(messages: ChatMessage[]) {
   const system = messages.filter((m) => m.role === 'system').map((m) => m.content).join('\n\n')
-  const rest = messages.filter((m) => m.role !== 'system').map((m) => ({ role: m.role, content: m.content }))
+  const rest = messages.filter((m) => m.role !== 'system').map((m) => {
+    if (!m.images?.length) return { role: m.role, content: m.content }
+    const parts: any[] = m.images.map((im) => { const mm = im.dataUrl.match(/^data:([^;]+);base64,(.+)$/); return { type: 'image', source: { type: 'base64', media_type: mm?.[1] || 'image/png', data: mm?.[2] || '' } } })
+    parts.push({ type: 'text', text: m.content || 'See the attached image(s).' })
+    return { role: m.role, content: parts }
+  })
   return { system, messages: rest }
 }
 
 async function anthropicStream(env: LLMEnv, model: string, messages: ChatMessage[]): Promise<Response> {
   const { system, messages: msgs } = toAnthropic(messages)
-  const res = await fetch(`${baseUrl(env)}/messages`, {
+  const res = await fetchRetry(`${baseUrl(env)}/messages`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-api-key': env.OPENAI_API_KEY, 'anthropic-version': '2023-06-01' },
     body: JSON.stringify({ model, system, messages: msgs, max_tokens: 16000, stream: true }),
@@ -91,7 +118,7 @@ async function anthropicStream(env: LLMEnv, model: string, messages: ChatMessage
 
 async function anthropicOnce(env: LLMEnv, model: string, messages: ChatMessage[]): Promise<string> {
   const { system, messages: msgs } = toAnthropic(messages)
-  const res = await fetch(`${baseUrl(env)}/messages`, {
+  const res = await fetchRetry(`${baseUrl(env)}/messages`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-api-key': env.OPENAI_API_KEY, 'anthropic-version': '2023-06-01' },
     body: JSON.stringify({ model, system, messages: msgs, max_tokens: 1024 }),
